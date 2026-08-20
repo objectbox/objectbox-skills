@@ -14,6 +14,13 @@ This repository encodes the failure modes as a skill.
 
 ## Install
 
+**Any agent, via [`npx skills`](https://github.com/vercel-labs/skills)** —
+installs into Claude Code, Codex, Cursor, OpenCode, and many other agents:
+
+```
+npx skills add objectbox/objectbox-skills
+```
+
 **Claude Code, via the plugin marketplace:**
 
 ```
