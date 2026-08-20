@@ -1,0 +1,13 @@
+{
+  "name": "objectbox",
+  "displayName": "ObjectBox",
+  "description": "Agent Skills for using the ObjectBox database correctly — entities, relations, queries, reactive observers, HNSW vector search, and Sync, across all language bindings.",
+  "version": "0.1.0",
+  "author": {
+    "name": "ObjectBox"
+  },
+  "homepage": "https://objectbox.io",
+  "repository": "https://github.com/objectbox/objectbox-skills",
+  "license": "Apache-2.0",
+  "keywords": ["objectbox", "database", "sync", "vector-search", "flutter", "android", "skills"]
+}

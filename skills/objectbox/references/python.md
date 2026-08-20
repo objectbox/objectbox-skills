@@ -1,14 +1,16 @@
-# ObjectBox — C / C++
+# ObjectBox — Python
 
-> **Status: stub.** This file needs a pass from a maintainer who works in this
-> binding. The structure below mirrors the Dart and Java/Kotlin files; the
-> content markers show what has to be filled in. Do not ship it as-is.
+> **Status: stub.** The binding-specific sections below are incomplete and need
+> a pass from a maintainer who works in this binding; the content markers show
+> what has to be filled in. Until it is complete: follow the contract in
+> [SKILL.md](../SKILL.md), use what *is* filled in here, and look up everything
+> else in the official docs — index at https://docs.objectbox.io/llms.txt
+> (covers Python), append `.md` to any page URL for Markdown. Do not
+> extrapolate from another binding's reference file — in particular, the Python
+> binding does not support relations.
 
-Instructions for AI coding agents working with ObjectBox in this repository.
-
-Read [`objectbox-capabilities.md`](../shared/objectbox-capabilities.md) first —
-it holds the binding-agnostic constraints. This file holds what is specific to
-C / C++.
+Binding-specific guidance for ObjectBox in Python. It assumes the
+binding-agnostic contract in [SKILL.md](../SKILL.md).
 
 ## Before you write code
 

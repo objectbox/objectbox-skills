@@ -1,16 +1,72 @@
-# ObjectBox capabilities contract
+---
+name: objectbox
+description: Use ObjectBox (on-device database with vector search and data sync) correctly in any of its bindings — Dart/Flutter, Java/Kotlin, Swift, Go, Python, C/C++. Use when writing, reviewing, or debugging code that stores, queries, observes, syncs, or vector-searches data with ObjectBox, including entities, relations, HNSW vector search, Sync clients, Sync Server setup, and the generated model file.
+license: Apache-2.0
+---
 
-Binding-agnostic hard constraints. Applies to every ObjectBox binding
-(Dart/Flutter, Java/Kotlin, Swift, Go, Python, C/C++).
+# ObjectBox
 
-When a project uses ObjectBox as its data layer, do not re-implement ObjectBox
-features in application code. Treat the rules below as constraints, not
-preferences. Where a rule cannot be met, propose the smallest fallback and say
-explicitly why.
+ObjectBox has six language bindings that are **not symmetric**, mandatory code
+generation, and a sync-critical generated model file. Reconstructing its APIs
+from training data or another binding's documentation produces code that fails
+silently — a `@Sync()` annotation on the wrong level, a `DateTime` stored as
+nanoseconds, a hand-rolled polling loop instead of a query subscription, a
+deprecated `Sync.client(...)` call. This skill encodes the failure modes.
 
-Exact API names differ per binding — see the binding's own `AGENTS.md`.
+## How to use this skill
+
+1. Apply the binding-agnostic contract below — it holds in every binding.
+2. Identify the project's binding and read its reference file.
+3. If the task matches a topic guide, read that too.
+
+### Find your binding
+
+| Project has | Binding | Read |
+|---|---|---|
+| `pubspec.yaml` with `objectbox` | Dart / Flutter | [references/dart-flutter.md](references/dart-flutter.md) |
+| `build.gradle(.kts)` with `io.objectbox` | Java / Kotlin | [references/java-kotlin.md](references/java-kotlin.md) |
+| `Package.swift` / `Podfile` with ObjectBox | Swift | [references/swift.md](references/swift.md) — stub, see banner |
+| `go.mod` with `objectbox/objectbox-go` | Go | [references/go.md](references/go.md) — stub, see banner |
+| `pyproject.toml` / requirements with `objectbox` | Python | [references/python.md](references/python.md) — stub, see banner |
+| `CMakeLists.txt` / headers with `objectbox` | C / C++ | [references/c-cpp.md](references/c-cpp.md) — stub, see banner |
+
+A workspace with several bindings (e.g. Flutter app + Go backend) needs the
+reference file for each binding you touch. Stub files are incomplete: for those
+bindings, follow this contract, use the stub's known asymmetries, and look up
+everything else in the official docs (see below) — do not extrapolate from
+another binding.
+
+### Task-specific guides
+
+| Task | Read |
+|---|---|
+| Set up or run a Sync Server; schema changes with Sync | [references/sync-server-setup.md](references/sync-server-setup.md) |
+| Vector search, semantic retrieval, RAG, HNSW indexes | [references/vector-search.md](references/vector-search.md) |
+
+### Look up the API, don't recall it
+
+The official docs serve clean Markdown: append `.md` to any page URL
+(e.g. `https://docs.objectbox.io/queries.md`), and each site publishes a full
+page index at `/llms.txt`.
+
+| Site | Covers |
+|---|---|
+| https://docs.objectbox.io/llms.txt | Java/Kotlin, Dart/Flutter, Python |
+| https://swift.objectbox.io/llms.txt | Swift |
+| https://golang.objectbox.io/llms.txt | Go |
+| https://cpp.objectbox.io | C/C++ (no llms.txt index) |
+| https://sync.objectbox.io/llms.txt | Sync and Sync Server |
 
 ---
+
+# The contract
+
+Binding-agnostic hard constraints. When a project uses ObjectBox as its data
+layer, do not re-implement ObjectBox features in application code. Treat the
+rules below as constraints, not preferences. Where a rule cannot be met,
+propose the smallest fallback and say explicitly why.
+
+Exact API names differ per binding — see the binding's reference file.
 
 ## 1) Store lifecycle
 
@@ -98,13 +154,13 @@ inter-process wake safety — never as primary change detection.
 - keep two active vector-search systems for the same retrieval flow
 - query several ANN boxes and merge results without a documented reason
 
-Preferred shape: rich domain entities stay source of truth; one canonical
-retrieval-index entity owns vectors and ANN queries; retrieval hydrates source
-entities after the nearest-neighbor search.
-
 Two properties of the API that are easy to get wrong:
 - the returned score is a **distance** — lower is better, not higher
 - HNSW dimensions must match your embedding output exactly, and are fixed once set
+
+Index design, filter interaction, sync behavior, and the per-binding API names
+are in [references/vector-search.md](references/vector-search.md) — read it
+before designing or reviewing a retrieval flow.
 
 ## 7) Sync
 
@@ -161,4 +217,5 @@ Known asymmetries:
 - the Python binding does not support relations — do not generate relation code for it
 - code generation is invoked differently per binding, but is required in all of them
 
-Always read the `AGENTS.md` in the binding's own repository.
+Always read the reference file for the binding you are working in, and verify
+anything a stub does not cover against the official docs listed above.

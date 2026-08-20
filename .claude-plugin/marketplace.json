@@ -1,0 +1,16 @@
+{
+  "name": "objectbox-skills",
+  "owner": {
+    "name": "ObjectBox",
+    "url": "https://objectbox.io"
+  },
+  "plugins": [
+    {
+      "name": "objectbox",
+      "source": "./",
+      "description": "Use the ObjectBox database correctly in any binding — entities, relations, queries, reactive observers, HNSW vector search, and Sync.",
+      "repository": "https://github.com/objectbox/objectbox-skills",
+      "license": "Apache-2.0"
+    }
+  ]
+}

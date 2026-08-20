@@ -3,6 +3,9 @@
 Binding-agnostic. The server takes the generated model file; only the path you
 copy it *from* differs per binding.
 
+Official Sync docs: https://sync.objectbox.io/llms.txt — append `.md` to any
+page URL for Markdown.
+
 ## The rule that catches most people
 
 The server does **not** find the model by itself. You must do **both**:

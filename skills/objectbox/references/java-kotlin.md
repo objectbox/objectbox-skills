@@ -1,12 +1,9 @@
 # ObjectBox — Java / Kotlin (Android, JVM desktop)
 
-Instructions for AI coding agents working with ObjectBox in this repository.
-Code examples are Kotlin; the Java equivalents follow the same rules.
-
-Read [`objectbox-capabilities.md`](https://github.com/objectbox/agent-skills/blob/main/shared/objectbox-capabilities.md)
-first — it holds the binding-agnostic constraints. This file holds what is
-specific to Java/Kotlin. For Sync Server setup see
-[`sync-server-setup.md`](https://github.com/objectbox/agent-skills/blob/main/shared/sync-server-setup.md).
+Binding-specific guidance for ObjectBox in Java/Kotlin. Code examples are
+Kotlin; the Java equivalents follow the same rules. This file assumes the
+binding-agnostic contract in [SKILL.md](../SKILL.md). For Sync Server setup see
+[sync-server-setup.md](sync-server-setup.md).
 
 ## Before you write code
 
@@ -194,19 +191,11 @@ q.close()
 // score is a DISTANCE — lower is better
 ```
 
-- Dimensions are required and must match your embedding output exactly.
 - Default distance is (squared) Euclidean. For sentence embeddings set cosine
   explicitly.
-- When combining nearest-neighbor with a selective filter, **over-fetch**
-  (larger `maxCount`) or you get too few matches back.
-- Never write a manual cosine scan over all rows in production.
 
-**Vectors and Sync:** embeddings sync as normal entity data — the
-"sync the text, recompute vectors locally" workaround is not needed. Put the
-embedding on the same synced entity as its metadata. Keep dimensions stable; to
-change models, add a new property and migrate deliberately. HNSW is a *local*
-index — it updates as objects arrive; do not try to sync the index. Watch payload
-size: large vectors increase sync traffic.
+Index design, filter over-fetching, stale detection, and how vectors interact
+with Sync: [vector-search.md](vector-search.md).
 
 ## 11. Query lifecycle
 
@@ -237,7 +226,7 @@ val syncClient = Sync.client(
 - `SyncCredentials.none()` pairs with a server started
   `--unsecured-no-authentication`, which is **loopback development only**. For
   anything else use the shared-secret credentials form and never commit the
-  secret. See [`sync-server-setup.md`](https://github.com/objectbox/agent-skills/blob/main/shared/sync-server-setup.md).
+  secret. See [sync-server-setup.md](sync-server-setup.md).
 
 ## 13. Gradle — sync vs. non-sync plugin
 
@@ -256,7 +245,7 @@ flag — using the non-sync library with `@Sync` entities fails at write time wi
 
 - Commit it.
 - Never delete or regenerate it to fix an error.
-- After any schema change, follow [`sync-server-setup.md`](https://github.com/objectbox/agent-skills/blob/main/shared/sync-server-setup.md)
+- After any schema change, follow [sync-server-setup.md](sync-server-setup.md)
   to update the server. A stale server model produces errors like
   `"Relations not allowed"`.
 
