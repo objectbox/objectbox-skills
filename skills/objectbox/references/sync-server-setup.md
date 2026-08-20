@@ -6,16 +6,13 @@ copy it *from* differs per binding.
 Official Sync docs: https://sync.objectbox.io/llms.txt — append `.md` to any
 page URL for Markdown.
 
-## The rule that catches most people
+## The model file rule
 
-The server does **not** find the model by itself. You must do **both**:
-
-1. mount a folder containing the model file to `/data`, and
-2. start the server with `--model` pointing at that file.
-
-Mounting the model somewhere without setting `--model` is the single most
-common setup error — the server starts, and then fails on the first schema it
-does not recognize.
+The server needs your generated model file. It picks up a file named
+`objectbox-model.json` from its working directory automatically; passing
+`--model <path>` makes the choice explicit and is recommended — it fails
+loudly instead of running with a stale or missing model. A server without your
+current model rejects client logins with `UNSUPPORTED_DATA_MODEL` (error 57).
 
 ## Setup
 
@@ -30,8 +27,9 @@ does not recognize.
 | Binding | Copy from |
 |---|---|
 | Java/Kotlin | `objectbox-models/default.json` |
-| Swift | `model-<project-name>.json` |
-| Dart, Go, C/C++ | `objectbox-model.json` |
+| Swift | `model-<target-name>.json` |
+| Dart | `lib/objectbox-model.json` |
+| Go, C/C++ | `objectbox-model.json` |
 
 **3. `docker-compose.yml`:**
 
@@ -39,8 +37,13 @@ does not recognize.
 services:
   sync:
     image: objectboxio/sync-server-trial
+    # Without a matching user the server may fail to create /data/objectbox.
+    user: "${UID:-1000}"
     ports:
       # Use ports that are unique to this project — see "Isolation" below.
+      # 127.0.0.1 binding reaches local clients only. Android emulators reach
+      # the host as 10.0.2.2 — for emulator/device testing bind wider AND
+      # switch to real authentication first.
       - "127.0.0.1:9999:9999"   # Sync endpoint
       - "127.0.0.1:9980:9980"   # Admin UI
     volumes:
@@ -56,18 +59,31 @@ services:
 
 **4. Start:** `docker compose up`
 
-The dataset lives under `./sync-server/objectbox/`. To reset it, delete that
-directory and restart.
+**5. Activate the trial:** open the Admin UI at `http://127.0.0.1:9980`,
+accept the Sync Trial consent and log in with an ObjectBox account. The trial
+runs **30 days per dataset** — the compose file alone does not give you a
+working server.
+
+**Smoke test:** `http://127.0.0.1:9980` serves the Admin UI, and
+`http://127.0.0.1:9999` answers with a plain-text response from the sync
+endpoint.
+
+The dataset lives under `./sync-server/objectbox/`. To reset it during
+development, delete that directory and restart.
 
 ## After every schema change
 
-A stale server model produces errors that look like schema bugs — for example
-`"Relations not allowed"`.
-
 1. Run code generation for your binding.
-2. Copy the regenerated model file to `./sync-server/objectbox-model.json`.
-3. Wipe the server dataset: `rm -rf sync-server/objectbox/`
-4. Restart the server.
+2. Give the server the new model: restart it with the updated
+   `objectbox-model.json`, **or** upload the file through the Admin UI
+   (Schema Versions). The server tracks schema versions and manages clients
+   still on older ones — do **not** wipe the dataset for a schema change.
+3. A client whose schema the server does not know is rejected with
+   `UNSUPPORTED_DATA_MODEL` (error 57). That error means "update the server
+   model", not "reset the database".
+
+If clients connect but nothing syncs, inspect the model JSON: entity types you
+expect to sync must carry `"flags": 2`.
 
 ## Isolation between projects
 
@@ -81,8 +97,17 @@ dataset without any error.
 - **`--unsecured-no-authentication` is for single-machine loopback development
   only.** Never on a LAN or a public interface — anyone who can reach the port
   can read and write the whole dataset.
-- **For anything else** — demos, multi-device, production — configure a shared
-  secret via a JSON config file (`-c /path/to/conf.json` with
-  `{"auth":{"sharedSecret":"..."}}`) and have the client authenticate with the
-  shared-secret credentials form for its binding.
+- **JWT is the primary authentication method** in the server docs
+  (`auth.jwt` in the server config). The simplest self-contained alternative
+  is a shared secret: a JSON config file (`-c sync-server-config.json` with
+  `{"auth":{"sharedSecret":"..."}}`) paired with the shared-secret credentials
+  form in the client binding.
 - Never commit the secret. Inject it from the environment or a secret store.
+- Prefer the JSON config file over CLI flags for anything beyond a toy setup;
+  CLI flags override the file when both are given.
+
+## Operations notes
+
+- The server's transaction history grows without bound by default — set
+  `historySizeMaxKb` / `historySizeTargetKb` for anything long-running.
+- For verbose logs use `--log-level debug` (`--debug` is deprecated).

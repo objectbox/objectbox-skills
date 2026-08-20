@@ -170,6 +170,8 @@ before designing or reviewing a retrieval flow.
 - local-only entities for caches, traces and recomputable indexes
 - stable references across the sync/local boundary
 - sync event listeners for UX status only
+- an explicit shutdown order: stop and close the sync client **before**
+  closing the store — the reverse is undefined behavior
 
 **Do not**
 - build custom "pull updates" or "request changes" background jobs
@@ -186,12 +188,17 @@ sync-critical source code.
 
 | Binding | Path |
 |---|---|
-| Java/Kotlin | `objectbox-models/default.json` |
-| Swift | `model-<project-name>.json` |
-| Dart, Go, C/C++ | `objectbox-model.json` |
+| Java/Kotlin | `objectbox-models/default.json` (under `app/` in a default Android setup) |
+| Swift | `model-<target-name>.json` |
+| Dart | `lib/objectbox-model.json` |
+| Go | `objectbox-model.json` — per package, next to `objectbox-model.go` |
+| C/C++ | `objectbox-model.json` (the generated `objectbox-model.h` is a separate file) |
 
 - Commit it.
-- Never delete or regenerate it to resolve an error.
+- Never delete or regenerate it to resolve an error. The only sanctioned reset
+  is the deliberate "nuke option" during initial development: delete the model
+  file **and** every database created with it (including any Sync Server
+  dataset) together.
 - If a Sync Server is involved, copy it to the server after every schema change,
   and start the server with an explicit `--model <path>` pointing at that copy.
 
@@ -213,8 +220,11 @@ API names are not symmetric across bindings. Reconstructing a call from another
 binding's documentation is the most common source of broken ObjectBox code.
 
 Known asymmetries:
-- nearest-neighbor query methods are named differently per binding
+- nearest-neighbor query methods are named differently per binding, and vector
+  search is not available in Go at all
 - the Python binding does not support relations — do not generate relation code for it
+- relation loading defaults differ: Go loads relations eagerly by default,
+  Swift and Dart lazily
 - code generation is invoked differently per binding, but is required in all of them
 
 Always read the reference file for the binding you are working in, and verify

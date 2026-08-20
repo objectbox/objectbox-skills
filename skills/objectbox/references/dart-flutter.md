@@ -21,7 +21,7 @@ section 11 as your starting shapes.
 
 - **`example/templates/objectbox-entity-template.dart`** — a complete
   `@Entity()` + `@Sync()` class with `@Id`, `@Index`,
-  `@Property(type: PropertyType.date)`, `ToOne`, `ToMany` + `@Backlink`,
+  `@Property(type: PropertyType.dateUtc)`, `ToOne`, `ToMany` + `@Backlink`,
   and a constructor.
 - **`example/templates/objectbox-repository-template.dart`** — a complete
   repository with CRUD and QueryBuilder patterns (equals / order / range /
@@ -48,7 +48,7 @@ class Conversation {
   @Id() int id = 0;
   @Index() String userId = '';
   String title = '';
-  @Property(type: PropertyType.date) DateTime updatedAt = DateTime.now();
+  @Property(type: PropertyType.dateUtc) DateTime updatedAt = DateTime.now();
 
   Conversation({this.id = 0, this.userId = '', this.title = ''});
 }
@@ -59,9 +59,11 @@ Two traps in that snippet, both silent:
 - **`@Sync()` is class-level, never property-level.** On a `String`/`bool`/`int`
   field it either fails codegen or is silently ignored — the entity is then
   simply not synced and nothing tells you.
-- **`DateTime` needs `@Property(type: PropertyType.date)`.** Without it, values
-  are stored as nanosecond timestamps (type 10) instead of millisecond dates,
-  which breaks interop with the Sync Server.
+- **`DateTime` needs `@Property(type: PropertyType.dateUtc)` (5.1+).**
+  `DateTime` is stored as milliseconds, but the older `date` / `dateNano`
+  annotations do not handle UTC properly — values drift with the device
+  timezone. Use `dateUtc` (or `dateNanoUtc` when you need nanoseconds) and
+  avoid the old `date` and `dateNano` forms.
 
 ## 2. Relations
 
@@ -91,7 +93,9 @@ Rules:
   is wrong — the relation object always exists; it is its *target* that may be null.
 - `@Backlink('fieldName')` names the `ToOne` field on the other side. For
   many-to-many, `@Backlink()` without an argument.
-- To-many relations resolve lazily on first access, then cache.
+- To-many relations resolve lazily on first access, then cache. The cache is
+  not invalidated by changes made elsewhere — call `reset()` on the `ToMany`
+  or re-read the source entity to see them.
 
 Reading and writing:
 
@@ -181,6 +185,9 @@ class ManualDocument {
   `sharedGlobalIds: true` IDs may be remapped.
 - `sharedGlobalIds` is immutable after first deployment.
 - Only use it when global uniqueness across devices is guaranteed.
+- Assignable IDs break new-vs-persisted detection: relation targets are no
+  longer put automatically — put them explicitly, and attach the box before
+  modifying relations.
 
 ## 7. Local-only entities in a sync store
 
@@ -189,9 +196,11 @@ Entities without `@Sync()` are local-only.
 - Do not create relations across the sync/local boundary.
 - A plain ID reference from a local entity to a synced one is only safe if the
   synced entity uses `sharedGlobalIds: true`.
-- **You cannot add `@Sync()` to an entity that already holds data.** There is no
-  migration path — the server dataset and possibly the client stores must be
-  wiped. This is destructive; back up first.
+- **You cannot flip an existing entity to `@Sync()` in place.** Options: while
+  still in development, add the annotation and wipe the databases; or assign
+  the entity a new UID (keeping the name), which drops that type's existing
+  data; or create a second, synced entity and migrate data in code. All are
+  destructive for that type — back up first.
 
 ## 8. Persisted state
 
@@ -238,7 +247,8 @@ Rules:
 - Emit immediately on listen, so the first frame has data.
 
 For a filtered, ordered list rather than a single object, use the query's own
-watch form instead of `entityChanges`.
+watch form instead of `entityChanges` — `.watch(triggerImmediately: true)`
+emits the current value on listen, so you don't hand-roll that part.
 
 ### With Riverpod
 
@@ -343,6 +353,8 @@ client.start();
 Training data is full of the deprecated form. Check before you write it.
 
 Rules:
+- `Sync.isAvailable()` tells you whether the loaded native library is
+  sync-enabled — check it first when debugging "sync has not been activated".
 - **Do not create a SyncClient when sync is disabled.** Check the enabled flag
   *before* constructing the client. A bogus URL like `ws://127.0.0.1:65535` plus
   `start()` is wrong — it still attempts a TCP connection.
@@ -424,12 +436,13 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 
 ## 16. Model file
 
-`objectbox-model.json` carries stable UIDs that Sync depends on.
+`lib/objectbox-model.json` carries stable UIDs that Sync depends on.
 
 - Commit it. Never delete or regenerate it to fix an error.
 - After any schema change: run `dart run build_runner build`, then follow
   [sync-server-setup.md](sync-server-setup.md)
-  to update the server. A stale server model produces errors like
+  to update the server. A stale server model rejects clients with
+  `UNSUPPORTED_DATA_MODEL` (error 57) or fails with schema errors like
   `"Relations not allowed"`.
 
 ## Quick reference — common mistakes
@@ -437,7 +450,7 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Mistake | Why it breaks | Fix |
 |---|---|---|
 | `@Sync()` on a property | class-level annotation; silently not synced | move it to the class |
-| `DateTime` without `@Property(type: PropertyType.date)` | stored as nanoseconds, breaks server interop | add the annotation |
+| `DateTime` with old `date`/`dateNano` annotations | broken UTC handling, timezone drift | `@Property(type: PropertyType.dateUtc)` (5.1+) |
 | `ToOne<X>? x;` — nullable or non-final | the relation object always exists; the *target* is what may be null | `final x = ToOne<X>();` |
 | Reading `.target` on a manually built entity | no store attached, cannot resolve | `x.attach(store)` first |
 | Mirror `int` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds: true` |
@@ -462,4 +475,4 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Duplicate enums for sync status | UI and data layer drift apart | one canonical enum, bridge it |
 | Unused `objectbox` dependency in a package | native setup breaks fresh clones for zero benefit | remove it from `pubspec.yaml` |
 | Sharing a test store across groups | cross-test pollution | one store per suite, or reset per group |
-| Stale server model JSON | server crashes | re-copy after every schema change |
+| Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |

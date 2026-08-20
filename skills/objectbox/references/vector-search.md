@@ -7,16 +7,27 @@ for your binding are in its own reference file.
 
 Official docs: https://docs.objectbox.io/on-device-vector-search.md
 
+Available in Python, C, C++, Dart/Flutter, Java/Kotlin and Swift.
+**Not available in the Go binding** — do not generate HNSW code for Go.
+
 ## Semantics that hold in every binding
 
 - The returned score is a **distance** — lower is better, not higher. Invert
   before ranking if callers expect similarity.
-- HNSW dimensions are required, must match your embedding output exactly, and
-  are **fixed once set**.
-- The default distance is (squared) Euclidean. For sentence embeddings set
-  cosine explicitly.
-- HNSW is a **local** index — it updates as objects arrive. Do not try to sync
-  or rebuild it manually.
+- Only the scored find variants (`findWithScores()` / `findIdsWithScores()`;
+  Python `find_with_scores()` / `find_ids_with_scores()`) return results
+  **ordered by distance**. The plain `find()` methods are not distance-ordered
+  — taking the first N of a plain find silently returns wrong "top" results.
+- HNSW dimensions are required and fixed per index. Vectors with **more**
+  dimensions than the index are accepted (extra dimensions unused); vectors
+  with **fewer** dimensions are **silently skipped by the index** — the object
+  is stored but can never be found by nearest-neighbor search. Match your
+  embedding output; keep it stable.
+- The default distance is (squared) Euclidean. Available types: euclidean,
+  cosine, dotProduct, dotProductNonNormalized, geo. For sentence embeddings
+  set cosine explicitly.
+- HNSW is a **local** index, updated automatically as objects are written. Do
+  not try to sync or rebuild it manually.
 
 ## Index design
 
@@ -28,6 +39,8 @@ Official docs: https://docs.objectbox.io/on-device-vector-search.md
 - Explicit stale detection: store a text hash, the embedding model identity, or
   the source identity next to the vector, and re-embed when it no longer
   matches. Never guess freshness.
+- Tuning knobs: `neighborsPerNode` (default 30) and `indexingSearchCount`
+  (docs recommend at least 200) trade index quality against indexing cost.
 
 ## Querying efficiently
 
@@ -35,8 +48,9 @@ Official docs: https://docs.objectbox.io/on-device-vector-search.md
   in production, and never load all vectors into memory to compute similarity —
   both defeat the index and grow linearly with the dataset.
 - When combining nearest-neighbor search with a selective filter, **over-fetch**:
-  the filter is applied to the ANN candidates, so a small `maxCount` returns too
-  few matches. A working heuristic: `maxCount = max(limit * 8, 40)`, then trim.
+  other conditions are applied to the ANN candidates, so a small `maxCount`
+  returns too few matches. A working heuristic from production use (the docs do
+  not specify one): `maxCount = max(limit * 8, 40)`, then trim.
 - Close queries like any other query (see the contract, section 4).
 
 ## Vectors and Sync
@@ -50,14 +64,22 @@ sync traffic.
 
 ## Per-binding API — do not extrapolate
 
-The nearest-neighbor query method is named differently per binding. Getting it
-from another binding's docs is the most common failure mode.
+The nearest-neighbor query API differs per binding — in method name, casing,
+and even declaration mechanism. Getting it from another binding's docs is the
+most common failure mode.
 
 | Binding | Nearest-neighbor query | Index declaration |
 |---|---|---|
-| Java/Kotlin | `nearestNeighbors(queryVector, maxCount)` | `@HnswIndex(dimensions = ...)` on a `FloatArray?` |
+| Java/Kotlin | `nearestNeighbors(queryVector, maxCount)` | `@HnswIndex(dimensions = ...)` on `float[]` / `FloatArray?` |
 | Dart | `nearestNeighborsF32(queryVector, maxCount)` | `@HnswIndex(dimensions: ...)` + `@Property(type: PropertyType.floatVector)` on `List<double>?` |
-| Swift, Go, Python, C/C++ | look it up in the official docs — see SKILL.md | look it up |
+| Python | `nearest_neighbor(query_vector, count)` | `Float32Vector(index=HnswIndex(dimensions=..., distance_type=VectorDistanceType....))` |
+| Swift | `nearestNeighbors(queryVector: v, maxCount: n)` — labeled arguments | comment annotation `// objectbox:hnswIndex: dimensions=...` on `[Float]?` |
+| C/C++ | `Entity_::prop.nearestNeighbors(v, n)` | in the `.fbs` schema: `/// objectbox: index=hnsw, hnsw-dimensions=...` (distance via `/// objectbox: hnsw-distance-type=...`) |
+| Go | not supported | not supported |
 
-Both documented bindings return scored results via `findWithScores()`; the
-score is a distance.
+Scored finds: `findWithScores()` / `findIdsWithScores()` in Java/Kotlin, Dart
+and Swift; `find_with_scores()` / `find_ids_with_scores()` in Python; C++
+`findWithScores()` returns entity/distance pairs.
+
+Python note: the docs mark the Python vector-search APIs as non-final and
+subject to change — re-check on version updates.

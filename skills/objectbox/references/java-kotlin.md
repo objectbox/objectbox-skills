@@ -32,7 +32,7 @@ data class Conversation(
 
 - `@Sync` is **class-level**. Placing it on a property either fails codegen or
   is silently ignored — the entity is then simply not synced and nothing says so.
-- Index the properties you filter or sort on.
+- Index the properties you filter on.
 
 ## 2. ToOne relations — the JVM initialization trap
 
@@ -55,19 +55,24 @@ class Message(...) {
 ```
 
 Rules:
-- Declare `@Transient @JvmField var __boxStore: BoxStore? = null` in every
-  non-`data class` that has relations.
-- Always initialize `ToOne` inline.
-- Never use `lateinit` for a `ToOne` on Kotlin desktop/JVM.
+- The trigger is the **build**, not the class shape: builds apply a
+  bytecode transformation that wires relations up — there,
+  `lateinit var conversation: ToOne<Conversation>` is the documented pattern.
+  Kotlin JVM desktop builds (Linux/macOS/Windows) have no such transformation.
+- On Kotlin JVM desktop: declare
+  `@Transient @JvmField var __boxStore: BoxStore? = null` in every entity with
+  relations, and always initialize `ToOne` inline — never `lateinit`.
 
 ## 3. When to call `attach()`
 
-`box.attach(entity)` sets `__boxStore` so `ToOne.get()` can resolve its target.
+`box.attach(entity)` sets `__boxStore` so relations can resolve and persist.
 
-- If you set the relation and do **not** hand the entity back to callers,
-  `attach()` is unnecessary.
-- If you return an entity and callers may call `.get()` on a relation, attach
-  before returning.
+- Attach before **modifying** a `ToOne`/`ToMany` on Kotlin JVM desktop (no
+  bytecode transformation) — in general, on any entity you constructed
+  yourself rather than read from a box.
+- Attach before `setAndPutTarget()` on a new, not-yet-put object, and before
+  modifying relations on entities with `@Id(assignable = true)`.
+- Entities returned from a `Box` are already attached.
 
 ## 4. Do not mirror a relation as a plain `Long`
 
@@ -100,9 +105,9 @@ ObjectBox does not cascade. Orphans are silent.
 fun deleteConversation(conversationId: Long): Boolean {
     val conversation = conversationBox.get(conversationId) ?: return false
     store.runInTx {
-        messageBox.query().equal(Message_.conversationId, conversationId).build().remove()
-        contextBox.query().equal(ContextPack_.conversationId, conversationId).build().remove()
-        summaryBox.query().equal(Summary_.conversationId, conversationId).build().remove()
+        messageBox.query(Message_.conversationId.equal(conversationId)).build().remove()
+        contextBox.query(ContextPack_.conversationId.equal(conversationId)).build().remove()
+        summaryBox.query(Summary_.conversationId.equal(conversationId)).build().remove()
         conversationBox.remove(conversation.id)
     }
     return true
@@ -128,6 +133,10 @@ data class ManualDocument(
   `sharedGlobalIds = true` IDs may be remapped.
 - `sharedGlobalIds` is immutable after first deployment.
 - Only use it when global uniqueness across devices is guaranteed.
+- Assignable IDs break new-vs-persisted detection: put such objects
+  immediately, attach the box before modifying their relations, and expect no
+  automatic put of relation targets. Check whether a unique indexed property
+  would do instead — the docs recommend that where viable.
 
 ## 7. Local-only entities in a sync store
 
@@ -136,8 +145,11 @@ Entities without `@Sync` are local-only.
 - Do not create relations across the sync/local boundary.
 - A plain ID reference from a local entity to a synced one is only safe if the
   synced entity uses `sharedGlobalIds = true`.
-- **You cannot add `@Sync` to an entity that already holds data.** There is no
-  migration path — server and client stores must be wiped. This is destructive.
+- **You cannot flip an existing entity to `@Sync` in place.** Options: while
+  still in development, add the annotation and wipe the databases; or assign
+  the entity a new UID (keeping the name), which drops that type's existing
+  data; or create a second, synced entity and migrate data in code. All are
+  destructive for that type — back up first.
 
 ## 8. Persisted state
 
@@ -173,7 +185,7 @@ fun stopObserving() {
 
 ```kotlin
 @HnswIndex(
-    dimensions = 384L,
+    dimensions = 384,
     distanceType = VectorDistanceType.COSINE,
     neighborsPerNode = 30,
     indexingSearchCount = 200
@@ -200,28 +212,35 @@ with Sync: [vector-search.md](vector-search.md).
 ## 11. Query lifecycle
 
 ```kotlin
-conversationBox.query()
-    .equal(Conversation_.userId, userId)
-    .orderDesc(Conversation_.updatedAt)
+conversationBox
+    .query(Conversation_.userId.equal(userId))
+    .order(Conversation_.updatedAt, QueryBuilder.DESCENDING)
     .build()
     .use { q -> q.findFirst() }
 ```
 
-- Use `use {}` for short-lived queries.
-- Cache and reuse long-lived queries only inside repository/data-access code.
+- Use the condition-based `box.query(condition)` API. The old chained builder
+  (`box.query().equal(prop, value)`) still compiles but is not recommended for
+  new projects since 4.0.1 — training data is full of it.
+- Use `use {}` for short-lived queries (`Query` implements `Closeable`).
+- Cache and reuse long-lived queries only inside repository/data-access code —
+  and not across threads: `Query` is not thread-safe.
 
 ## 12. Sync client — "pull updates" is built in
 
 ```kotlin
-val syncClient = Sync.client(
-    boxStore,
-    "wss://your-server:9999",
-    SyncCredentials.none()      // dev only
-).buildAndStart()
+val syncClient = Sync.client(boxStore)
+    .url("wss://your-server:9999")
+    .credentials(SyncCredentials.none())   // dev only
+    .buildAndStart()
 ```
 
 - Sync sends and receives automatically once started. Do not add a fetch loop.
 - A started client cannot be started again — stop/close and build a new one.
+- `Sync.isAvailable()` tells you whether the loaded native library is
+  sync-enabled — check it first when debugging.
+- Close the sync client **before** closing the store — the reverse order is
+  undefined behavior.
 - Use event listeners for connection status in the UI, not polling.
 - `SyncCredentials.none()` pairs with a server started
   `--unsecured-no-authentication`, which is **loopback development only**. For
@@ -231,22 +250,27 @@ val syncClient = Sync.client(
 ## 13. Gradle — sync vs. non-sync plugin
 
 ```kotlin
-apply(plugin = "io.objectbox.sync")   // sync-enabled
+plugins {
+    id("io.objectbox.sync")   // instead of id("io.objectbox")
+}
 ```
 
 Apply native runtimes in the consuming modules (Android / desktop), not in a
-shared module. The sync-enabled native library is a **different artifact**, not a
-flag — using the non-sync library with `@Sync` entities fails at write time with
+shared module. The sync-enabled native library is a **different artifact**
+(`objectbox-sync-<platform>` instead of `objectbox-<platform>`), not a flag —
+using the non-sync library with `@Sync` entities fails at write time with
 `"sync has not been activated"`.
 
 ## 14. Model file
 
-`objectbox-models/default.json` carries stable UIDs that Sync depends on.
+`objectbox-models/default.json` (under `app/` in a default Android setup)
+carries stable UIDs that Sync depends on.
 
 - Commit it.
 - Never delete or regenerate it to fix an error.
 - After any schema change, follow [sync-server-setup.md](sync-server-setup.md)
-  to update the server. A stale server model produces errors like
+  to update the server. A stale server model rejects clients with
+  `UNSUPPORTED_DATA_MODEL` (error 57) or fails with schema errors like
   `"Relations not allowed"`.
 
 ## Quick reference — common mistakes
@@ -260,7 +284,8 @@ flag — using the non-sync library with `@Sync` entities fails at write time wi
 | `lateinit ToOne` on JVM | relation never initialized | inline `ToOne(this, ...)` |
 | Mirror `Long` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds` |
 | Unclosed query | leaks in long-running apps | `use {}` or close explicitly |
+| Old chained `query().equal(...)` builder | not recommended since 4.0.1 | condition-based `box.query(condition)` |
 | Treating score as similarity | score is a distance | invert before ranking |
 | Non-sync native lib + `@Sync` entities | writes fail: "sync has not been activated" | use the sync-enabled build |
-| Stale server model JSON | server crashes | re-copy after every schema change |
+| Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |
 | Adding `@Sync` to an entity with data | unsupported migration | wipe server + clients, or model anew |
