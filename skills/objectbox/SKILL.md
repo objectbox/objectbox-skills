@@ -57,6 +57,26 @@ page index at `/llms.txt`.
 | https://cpp.objectbox.io | C/C++ (no llms.txt index) |
 | https://sync.objectbox.io/llms.txt | Sync and Sync Server |
 
+### Start from an official example
+
+Smaller models copy-and-adapt concrete code reliably but reconstruct
+annotations badly from rules. Fetch an official example, copy its structure,
+then apply this skill's rules on top. Where the two disagree, this skill
+wins: an example targets one release, this skill tracks the current one.
+Fetch the raw file (`https://raw.githubusercontent.com/<org>/<repo>/main/<path>`),
+not the GitHub HTML page. Binding files name the specific files to fetch where
+they exist, and the in-file snippets to fall back on when you cannot fetch URLs.
+
+| Repository | Covers |
+|---|---|
+| https://github.com/objectbox/objectbox-sync-examples | Sync clients for every binding (`tasks/client-*`) and Sync Server setups (`tasks/server-*`) |
+| https://github.com/objectbox/objectbox-examples | Java, Kotlin, Android: relations, vector search, multi-module, multi-process |
+| https://github.com/objectbox/objectbox-dart/tree/main/objectbox/example | Dart/Flutter: basics, relations, vector search |
+| https://github.com/objectbox/objectbox-swift/tree/main/Example | Swift: Notes app for iOS and macOS |
+| https://github.com/objectbox/objectbox-go/tree/main/examples | Go |
+| https://github.com/objectbox/objectbox-python/tree/main/example | Python: tasks, vector search, ollama |
+| https://github.com/objectbox/objectbox-c/tree/main/examples | C and C++ |
+
 ---
 
 # The contract
@@ -87,13 +107,22 @@ Exact API names differ per binding — see the binding's reference file.
 - real relations and typed link entities
 - queryable scalar fields for anything you filter, count or sort on
 - normalized child entities when the relationship carries metadata
+- a persisted property for any state that must survive a re-read
+- one enum per concept, defined in the data layer, persisted through a
+  scalar mapping you own
 
 **Do not**
 - default to JSON-string bags for semantically important data
 - hide structure in opaque blobs when it should be queryable
+- keep state in transient fields or plain memory and expect it back after a
+  re-read
+- persist an enum through a mapping that changes when the enum is edited
 
-Data that usually should *not* live primarily in a JSON string: tags, failure
-modes, file lists, command lists, verification outcomes, retrieval inputs.
+Objects are rebuilt on every read: `get`, queries and relation access return
+fresh instances, so nothing held in a transient field or only in memory
+survives a re-read. Enums go through a converter or an int getter/setter
+(see the binding file); keep that mapping stable across releases and give
+the enum an explicit unknown value for ids it does not recognize.
 
 ## 3) Identity and invariants
 
@@ -105,13 +134,10 @@ Important invariants must be enforced by schema and write paths, not by comments
 - deterministic duplicate repair with explicit logging
 
 **Do not**
-- rely on "there should only be one row" comments
-- assume a query returns exactly one row without checking
+- rely on "there should only be (exactly) one row" comments
 - use silent replace semantics on root identity entities
-
-Specifically: do not use replace-on-conflict for project/plan/root identity rows
-unless the reason is explicit and documented. Prefer update-in-place inside a
-transaction.
+- do not use replace-on-conflict when syncing:
+  prefer update-in-place inside a transaction
 
 ## 4) Queries
 
@@ -137,8 +163,8 @@ transaction.
 - use repeated queries as invalidation
 - rely on timers except for low-frequency safety and recovery cases
 
-For headless queue workers: subscription-driven wakeups are primary. A
-low-frequency timer is acceptable only for lease-deadline recovery or
+For headless queue workers: subscription-driven wakeups are primary.
+A low-frequency timer is acceptable only for lease-deadline recovery or
 inter-process wake safety — never as primary change detection.
 
 ## 6) Vector search
@@ -149,7 +175,7 @@ inter-process wake safety — never as primary change detection.
 - explicit stale detection via text hash, embedding model identity, or source identity
 
 **Do not**
-- ship brute-force similarity scans in production
+- brute-force similarity scans (other than tests/debugging)
 - load all vectors into memory to compute similarity
 - keep two active vector-search systems for the same retrieval flow
 - query several ANN boxes and merge results without a documented reason
@@ -183,8 +209,8 @@ before designing or reviewing a retrieval flow.
 
 ## 8) Schema and the model file
 
-The generated model file carries stable UIDs that Sync depends on. Treat it as
-sync-critical source code.
+The generated model file carries stable UIDs that Sync depends on.
+Treat it as sync-critical source code.
 
 | Binding | Path |
 |---|---|

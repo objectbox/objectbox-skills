@@ -63,16 +63,24 @@ Rather than mirroring API documentation, the skill points agents at the
 official docs, which serve agent-readable Markdown: append `.md` to any page
 URL, or fetch the `/llms.txt` index of each docs site.
 
+## Validation
+
+The skill files are prose, so `validation/` holds what falsifies them. For
+Dart, `validation/dart/run.sh` analyzes every code snippet in
+`dart-flutter.md` against a pinned ObjectBox version and runs one test per
+behavioral claim. Its `COVERAGE.md` maps each row of the skill's
+quick-reference table to the check behind it, or marks it unverified.
+
 ## Status
 
-| Binding | State |
-|---|---|
+| Binding        | State                                |
+|----------------|--------------------------------------|
 | Dart / Flutter | Written, derived from production use |
-| Java / Kotlin | Written, derived from production use |
-| Swift | Stub — needs a maintainer pass |
-| Go | Stub — needs a maintainer pass |
-| Python | Stub — needs a maintainer pass |
-| C / C++ | Stub — needs a maintainer pass |
+| Java / Kotlin  | Written, derived from production use |
+| Swift          | Stub — needs a maintainer pass       |
+| Go             | Stub — needs a maintainer pass       |
+| Python         | Stub — needs a maintainer pass       |
+| C / C++        | Stub — needs a maintainer pass       |
 
 Stub bindings still get the full binding-agnostic contract; their reference
 files carry the known asymmetries and point to the official docs for the rest.

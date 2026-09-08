@@ -18,6 +18,8 @@ data gets wrong. It is not a mirror of API documentation.
   (`sync-server-setup.md`, `vector-search.md`).
 - `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — the repo
   root is the plugin; skills under `skills/` are auto-discovered.
+- `validation/<binding>/` — executable checks for the claims in the skill
+  files (see `validation/README.md`). Not skill content; agents never load it.
 
 ## Rules for editing content
 
@@ -30,7 +32,15 @@ data gets wrong. It is not a mirror of API documentation.
   memory. Verify against the official docs (append `.md` to any docs page URL;
   each site has an `/llms.txt` index — the URLs are listed in SKILL.md).
 - **Do not vendor documentation.** The skill links to the live docs sites;
-  never copy doc pages into this repo where they would go stale.
+  never copy doc pages into this repo where they would go stale. The same
+  goes for example code: link the official example repos (raw file URLs),
+  never keep templates here.
+- **Docs prove existence, not behavior.** Checking a docs page settles only
+  whether an API exists. A claim that something *happens* — fails silently,
+  is ignored, drifts, leaks — needs a test under `validation/<binding>/` or
+  an explicit `unverified` row in that binding's `COVERAGE.md`. Hedged
+  wording ("either fails or is silently ignored") means nobody ran it: run
+  it.
 - **Topics graduate, structure stays.** When a section of a binding file grows
   into real workflow material, move it to its own `references/<topic>.md` and
   add a row to SKILL.md's task-guide table. A new *skill* is justified only for
@@ -56,3 +66,6 @@ data gets wrong. It is not a mirror of API documentation.
 - SKILL.md stays well under 500 lines; deep material goes to `references/`.
 - Any new or changed API claim was checked against the official docs, not
   recalled.
+- `validation/dart/run.sh` passes after touching `dart-flutter.md`, and every
+  row of its "Quick reference" table has a row in
+  `validation/dart/COVERAGE.md`.

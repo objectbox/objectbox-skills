@@ -151,10 +151,15 @@ Entities without `@Sync` are local-only.
   data; or create a second, synced entity and migrate data in code. All are
   destructive for that type — back up first.
 
-## 8. Persisted state
+## 8. Transient fields and enums
 
-- Do not overload fields (e.g. bumping a `version` field just to "touch" sync).
-- If state must survive re-creation, give it a dedicated field.
+Objects are rebuilt on every read (contract, section 2). `@Transient` marks a
+field that is not stored. Enums persist through
+`@Convert(converter = RoleConverter.class, dbType = Integer.class)` with a
+`PropertyConverter` that maps explicit ids. The docs are blunt: "Do not
+persist the enum's ordinal or name: both are unstable". Give the enum an
+`UNKNOWN` value for ids the converter does not recognize. Converter code:
+https://docs.objectbox.io/advanced/custom-types.md
 
 ## 9. Reactive updates — no polling loops
 
@@ -289,3 +294,4 @@ carries stable UIDs that Sync depends on.
 | Non-sync native lib + `@Sync` entities | writes fail: "sync has not been activated" | use the sync-enabled build |
 | Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |
 | Adding `@Sync` to an entity with data | unsupported migration | wipe server + clients, or model anew |
+| Persisting an enum's `ordinal()` or `name()` | both change when the enum is edited | `@Convert` with explicit ids and an `UNKNOWN` value |
