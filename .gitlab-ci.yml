@@ -36,9 +36,10 @@ validate:
     - python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
     - cd validation/dart
     # Resolve packages first: without package_config.json the formatter ignores
-    # the package's language version and applies the newest style.
+    # the package's language version. Format only tracked files: the generated
+    # objectbox.g.dart is in the generator's style and is not ours to check.
     - dart pub get
-    - dart format --output=none --set-exit-if-changed lib tool
+    - dart format --output=none --set-exit-if-changed $(git ls-files -- 'lib/*.dart' 'tool/*.dart')
     - ./run.sh
     - dart analyze lib tool
 

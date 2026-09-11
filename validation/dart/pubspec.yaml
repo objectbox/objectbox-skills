@@ -3,7 +3,7 @@ description: Executable checks for the claims in skills/objectbox/references/dar
 publish_to: none
 
 environment:
-  sdk: ^3.6.0
+  sdk: ^3.7.0
 
 # Pin exact versions: the coverage table records which version each claim was
 # verified against. Bump deliberately, then re-run ./run.sh.

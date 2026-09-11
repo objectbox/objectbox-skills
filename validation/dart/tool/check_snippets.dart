@@ -36,10 +36,12 @@ final skipRules = {
 };
 
 final declLine = RegExp(
-    r'^(@\w+|class\s|enum\s|mixin\s|typedef\s|(?:[A-Z]\w*(?:<[^;{]*>)?\??|bool|void|int|double|String)\s+\w+\s*\([^;]*\)\s*(?:async\s*)?\{)');
+  r'^(@\w+|class\s|enum\s|mixin\s|typedef\s|(?:[A-Z]\w*(?:<[^;{]*>)?\??|bool|void|int|double|String)\s+\w+\s*\([^;]*\)\s*(?:async\s*)?\{)',
+);
 final declName = RegExp(
-    r'^(?:class|enum|mixin)\s+(\w+)|^(?:[A-Z]\w*(?:<[^;{]*>)?\??|bool|void|int|double|String)\s+(\w+)\s*\(',
-    multiLine: true);
+  r'^(?:class|enum|mixin)\s+(\w+)|^(?:[A-Z]\w*(?:<[^;{]*>)?\??|bool|void|int|double|String)\s+(\w+)\s*\(',
+  multiLine: true,
+);
 
 void main() {
   final text = File(skillPath).readAsStringSync();
@@ -54,10 +56,11 @@ void main() {
     total++;
     final code = m.group(1)!;
     final line = text.substring(0, m.start).split('\n').length;
-    final skip = skipRules.entries
-        .where((e) => e.key.hasMatch(code))
-        .map((e) => e.value)
-        .firstOrNull;
+    final skip =
+        skipRules.entries
+            .where((e) => e.key.hasMatch(code))
+            .map((e) => e.value)
+            .firstOrNull;
     if (skip != null) {
       skipped++;
       stdout.writeln('skip  block at line $line: $skip');
@@ -65,7 +68,7 @@ void main() {
     }
     final isDecl = code.split('\n').any(declLine.hasMatch);
     final declared = {
-      for (final d in declName.allMatches(code)) d.group(1) ?? d.group(2)!
+      for (final d in declName.allMatches(code)) d.group(1) ?? d.group(2)!,
     };
     String hide(Set<String> names) {
       final h = names.intersection(declared);
@@ -91,16 +94,21 @@ $body''';
     final name = 'snippet_${total.toString().padLeft(2, '0')}_line$line.dart';
     File('$outDir/$name').writeAsStringSync(out);
   }
-  stdout
-      .writeln('extracted ${total - skipped} of $total dart blocks to $outDir');
+  stdout.writeln(
+    'extracted ${total - skipped} of $total dart blocks to $outDir',
+  );
 
-  final result =
-      Process.runSync('dart', ['analyze', '--format=machine', outDir]);
-  final rows = (result.stdout as String)
-      .split('\n')
-      .where((l) => l.contains('|'))
-      .map((l) => l.split('|'))
-      .toList();
+  final result = Process.runSync('dart', [
+    'analyze',
+    '--format=machine',
+    outDir,
+  ]);
+  final rows =
+      (result.stdout as String)
+          .split('\n')
+          .where((l) => l.contains('|'))
+          .map((l) => l.split('|'))
+          .toList();
   var errors = 0;
   for (final r in rows) {
     final severity = r[0], code = r[2], file = r[3].split('/').last;
