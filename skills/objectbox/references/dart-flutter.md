@@ -55,19 +55,12 @@ Two traps in that snippet, both silent:
 - **`@Sync()` is class-level, never property-level.** On a `String`/`bool`/`int`
   field it either fails codegen or is silently ignored — the entity is then
   simply not synced and nothing tells you.
-- **`DateTime` round-trips as an instant, not as the object you put in.**
-  Every date type stores a Unix timestamp, which carries no timezone —
-  nothing drifts, whatever the device timezone. What differs is the
-  *read-back* flag: `PropertyType.date` returns a **local** `DateTime`,
-  `PropertyType.dateUtc` (5.1+) returns a **UTC** one. State the type
-  explicitly — an un-annotated `DateTime` defaults to `date` and the
-  generator warns about it. Match the type to how the app handles time:
-  local `DateTime.now()` with `date`,
-  `DateTime.now().toUtc()` or server timestamps with `dateUtc`. Mixing them
-  fails silently, because Dart's `==` requires the same moment *and* the
-  same zone flag, so a value read back never equals the one you stored.
-  Precision is also truncated to milliseconds (`dateNano` / `dateNanoUtc`
-  keep microseconds). Compare with `isAtSameMomentAs`, never `==`.
+- **`DateTime` comes back with the zone flag of its type, not of the value you stored.**
+  `PropertyType.date` returns local time, `PropertyType.dateUtc` returns UTC;
+  the stored instant is the same either way.
+  Match the type to how the app handles time, and compare with `isAtSameMomentAs`,
+  never `==` — Dart's `==` also compares the zone flag.
+  Details: https://docs.objectbox.io/property-types.md
 
 ## 2. Relations
 
