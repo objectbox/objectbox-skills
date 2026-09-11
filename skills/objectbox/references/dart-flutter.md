@@ -232,9 +232,8 @@ Stream<List<Conversation>> watchConversations(String userId) =>
 
 Rules:
 - Cancel the subscription when the widget or provider goes away.
-- `cancel()` stops the events but does **not** close the query: every event
-  carries the same `Query` instance, and it stays open. For short-lived
-  streams keep the last emitted query and `close()` it after cancelling.
+- `cancel()` stops the events but does not close the emitted `Query`; it is
+  held until garbage collection, which rarely matters.
 - Expose the stream through your state layer's stream primitive (a
   `StreamProvider` in Riverpod). No invalidation after a mutation — the
   `put()` already triggers the next event.
@@ -267,7 +266,9 @@ with Sync: [vector-search.md](vector-search.md).
 
 ## 11. Query lifecycle
 
-Short-lived (the default): build, run, close in one scope.
+Closing, reuse and parameters are in the docs — "Close the query" and
+"Reuse Queries and Parameters" in https://docs.objectbox.io/queries.md
+The short-lived shape:
 
 ```dart
 final query = conversationBox
@@ -281,26 +282,9 @@ try {
 }
 ```
 
-Long-lived (hot paths, repositories): build once with a placeholder value,
-keep it, and set the parameter before each run:
-
-```dart
-final byUser = conversationBox
-    .query(Conversation_.userId.equals(''))
-    .build();                                 // once, owned by the repository
-
-List<Conversation> forUser(String userId) =>
-    (byUser..param(Conversation_.userId).value = userId).find();
-// byUser.close() when the repository is disposed
-```
-
-- An unclosed query holds native resources until the garbage collector runs
-  its finalizer — unpredictable, so close explicitly. Using a closed query
-  throws `StateError`.
-- When a property appears in two conditions, give the condition an `alias`
-  and set the parameter by alias: "Reuse Queries and Parameters" in
-  https://docs.objectbox.io/queries.md
-- A query emitted by `watch()` is long-lived by construction — section 9.
+For a hot path build once and change parameters with `param(...).value`
+instead of rebuilding. A query emitted by `watch()` is long-lived by
+construction (section 9).
 
 ## 12. Native library — sync vs. non-sync
 
@@ -471,10 +455,8 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Skipping `build_runner` after entity change | stale `objectbox.g.dart`; analyze/test fail | `dart run build_runner build` |
 | `nearestNeighbors(...)` | that is the Java/Kotlin name | `nearestNeighborsF32(...)` |
 | Treating score as similarity | score is a distance | invert before ranking |
-| Unclosed query | holds native resources until GC finalization | `query.close()` in a `finally`; long-lived queries close with their owner |
-| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `param(...).value` before each run (section 11) |
+| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `param(...).value` before each run |
 | Polling, or a hand-rolled `StreamController` over `entityChanges` | `watch()` already is that bridge | `box.query(...).watch(triggerImmediately: true)` |
-| Cancelling a `watch()` subscription and forgetting the query | `cancel()` does not close the emitted `Query` | keep the last emitted query, `close()` it after cancel |
 | Not filtering `changedTypes` | fires on every entity type | `changedTypes.contains(MyEntity)` |
 | State in a `@Transient()` field or a second enum copy | objects are rebuilt on every read; a second enum is a second index mapping | persisted property; one enum with a stable `int` mapping (section 8) |
 | Unused `objectbox` dependency in a package | native setup breaks fresh clones for zero benefit | remove it from `pubspec.yaml` |

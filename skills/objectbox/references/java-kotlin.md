@@ -236,8 +236,9 @@ with Sync: [vector-search.md](vector-search.md).
 
 ## 11. Query lifecycle
 
-Short-lived (the default): `Query` implements `Closeable`, so scope it with
-`use {}`:
+Closing, reuse and parameters are in the docs — "Close the query" and
+"Reuse Queries and Parameters" in https://docs.objectbox.io/queries.md
+The short-lived Kotlin shape:
 
 ```kotlin
 conversationBox
@@ -247,25 +248,12 @@ conversationBox
     .use { q -> q.findFirst() }
 ```
 
-Long-lived (hot paths, repositories): build once with a placeholder value,
-keep it, and `setParameter` before each run:
-
-```kotlin
-private val byUser = conversationBox
-    .query(Conversation_.userId.equal(""))
-    .build()                                  // once, owned by the repository
-
-fun forUser(userId: String): List<Conversation> =
-    byUser.setParameter(Conversation_.userId, userId).find()
-// byUser.close() when the repository is closed
-```
-
 - Use the condition-based `box.query(condition)` API. The old chained builder
   (`box.query().equal(prop, value)`) still compiles but is not recommended for
   new projects since 4.0.1 — training data is full of it.
-- An unclosed query is closed by its finalizer eventually; the API doc calls
-  that "expensive finalization". Close explicitly.
-- `Query` is not thread-safe: `query.copy()` per thread, or synchronize.
+- For a hot path build once and `setParameter` before each run instead of
+  rebuilding. `Query` is not thread-safe: `query.copy()` per thread, or
+  synchronize.
 
 ## 12. Sync client — "pull updates" is built in
 
@@ -320,8 +308,7 @@ carries stable UIDs that Sync depends on.
 | Manual cosine scan | unbounded, defeats HNSW | `nearestNeighbors(...)` |
 | `lateinit ToOne` on JVM | relation never initialized | inline `ToOne(this, ...)` |
 | Mirror `Long` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds` |
-| Unclosed query | closed only by its finalizer, "expensive finalization" | `use {}` or close explicitly |
-| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `setParameter` before each run (section 11) |
+| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `setParameter` before each run |
 | Old chained `query().equal(...)` builder | not recommended since 4.0.1 | condition-based `box.query(condition)` |
 | Treating score as similarity | score is a distance | invert before ranking |
 | Non-sync native lib + `@Sync` entities | writes fail: "sync has not been activated" | use the sync-enabled build |

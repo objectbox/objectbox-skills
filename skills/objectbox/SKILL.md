@@ -145,23 +145,16 @@ Important invariants must be enforced by schema and write paths, not by comments
 - direct queries for counts, slices and ordering
 - relation-aware filtering where the binding supports it
 - narrow hydration after targeted queries
-- explicit query close (or the binding's scoped form)
+- a short-lived query by default: build, run, close in one scope
+- a long-lived query for hot paths: built once, kept by its owner, re-run
+  with changed parameters — one per thread, queries are not thread-safe
 
 **Do not**
 - bulk-load whole boxes and compute statistics in memory when a query can do it
 - use "get all" as the default read pattern
-- leave queries unclosed: an open query holds native resources
-  (in languages with garbage collectors, it eventually gets finalized, but the timing is unpredictable)
+- rebuild the same query on every call in a hot path
 
-A built query has one of two lifetimes — choose deliberately:
-- **Short-lived** (the default): build, run, close in one scope, using the
-  binding's scoped form where it has one.
-- **Long-lived** (hot paths, repositories, observers): build once with
-  placeholder values, keep it in the data-access layer, change its parameters
-  before each run, and keep it open along with its owner (e.g. close when owner goes down).
-  Queries are not thread-safe: use one per thread — via the binding's query
-  copy/clone method, see the binding file — or synchronize if concurrency is
-  low.
+Closing, reuse and parameters: https://docs.objectbox.io/queries.md
 
 ## 5) Reactive updates
 
