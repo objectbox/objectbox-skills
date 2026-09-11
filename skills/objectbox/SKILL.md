@@ -6,12 +6,16 @@ license: Apache-2.0
 
 # ObjectBox
 
-ObjectBox has six language bindings that are **not symmetric**, mandatory code
-generation, and a sync-critical generated model file. Reconstructing its APIs
-from training data or another binding's documentation produces code that fails
-silently — a `@Sync()` annotation on the wrong level, a `DateTime` stored as
-nanoseconds, a hand-rolled polling loop instead of a query subscription, a
-deprecated `Sync.client(...)` call. This skill encodes the failure modes.
+ObjectBox has six language bindings that are not always symmetric, mandatory code
+generation, and a sync-critical generated model file.
+The official docs cover the API.
+They do not cover the pitfalls that come up in practice:
+behavior the docs do not state, differences between bindings, APIs that changed
+after most training data was written, and the operational rules around Sync and
+the model file.
+Most of these fail silently or with a misleading error.
+This skill names each pitfall and its fix; apply it to avoid them rather than
+debug them.
 
 ## How to use this skill
 

@@ -3,14 +3,51 @@
 [Agent Skills](https://agentskills.io) that help AI coding agents use
 [ObjectBox](https://objectbox.io) correctly.
 
-ObjectBox has six language bindings that are **not symmetric**, mandatory code
-generation, and a sync-critical generated model file. Agents working from
-training data get these wrong in ways that fail silently — a `@Sync()`
-annotation on the wrong level, a `DateTime` stored as nanoseconds, a
-hand-rolled polling loop instead of a query subscription, a deprecated
-`Sync.client(...)` call.
+ObjectBox has six language bindings that are not always symmetric, mandatory code
+generation, and a sync-critical generated model file.
+The official docs cover the API.
+They do not cover the pitfalls an agent runs into in practice, for example:
 
-This repository encodes the failure modes as a skill.
+- a vector search score read as similarity, when it is a distance and lower is
+  better, so results rank backwards;
+- a store closed before its sync client, which is undefined behavior;
+- a generated model file regenerated to "fix" a schema error, which throws away
+  the UIDs that Sync depends on;
+- an API name or relation-loading default carried over from another binding,
+  where the bindings differ.
+
+Most of these fail silently or with a misleading error.
+This repository encodes the pitfalls and their fixes as a skill,
+so an agent avoids them instead of debugging them.
+
+## What this adds over the docs
+
+An agent that can fetch the official docs can look up any API. The skill sends
+it there (append `.md` to any docs page URL, or fetch the site's `/llms.txt`
+index) and adds the three things the docs cannot give it:
+
+- **Behavior the docs do not state.** Traps that fail silently or with a
+  misleading error. Each is backed by an objectbox-dart test cited in
+  `validation/dart/COVERAGE.md`, or marked unverified there.
+  No model can look up what is not written down.
+- **Asymmetries between bindings.** Method names, relation-loading defaults and
+  feature availability differ per binding. Fluency makes this worse, not better:
+  an agent that has seen more Java ObjectBox than Dart reconstructs Dart calls
+  from Java. The skill forbids extrapolation and lists the known differences.
+- **Operational policy.** How to treat the generated model file, how to hand a
+  Sync Server the model after a schema change, the shutdown order of sync client
+  and store, how to test against a Sync Server without flakes.
+  This is team practice, not API.
+
+Stronger models need the contract's architecture rules less and the trap tables
+just as much.
+
+## When you do not need it
+
+One binding, no Sync, no vector search, and an agent that can fetch the docs:
+the skill is then mostly a review checklist, and the binding's quick-reference
+table is the part still worth reading. Sync, or several bindings in one
+workspace, is where the skill pays for itself.
 
 ## Install
 
@@ -59,9 +96,8 @@ Shared rules live exactly once, in `SKILL.md`. Deep or cross-cutting topics are
 reference files. An agent loads the contract plus only the references its task
 needs — adding a binding or a topic is one file and one routing row.
 
-Rather than mirroring API documentation, the skill points agents at the
-official docs, which serve agent-readable Markdown: append `.md` to any page
-URL, or fetch the `/llms.txt` index of each docs site.
+The skill does not mirror API documentation; it points agents at the official
+docs instead, so nothing here goes stale against a release.
 
 ## Validation
 
