@@ -23,6 +23,11 @@ data gets wrong. It is not a mirror of API documentation.
 
 ## Rules for editing content
 
+- **Prefer a line width of 100 and keep sentences at line boundaries.**
+  Go up to 120 chars if a newline would disrupt the content.
+  Otherwise try to keep sentences in one line (newline after a sentence).
+  Long sentences shall be also split at commas, (semi)colons, etc.
+  Do not reformat old content for line width; only when editing.
 - **Shared rules live exactly once, in SKILL.md's contract.** Never copy a
   binding-agnostic rule into a language or topic file — link to where it lives.
   Duplication drifting apart is the exact failure mode this repo exists to
@@ -64,6 +69,26 @@ data gets wrong. It is not a mirror of API documentation.
 - **Frontmatter:** keep `name: objectbox` stable. The `description` is the
   trigger — third person, states when to use the skill, names the bindings.
 
+## Verifying a claim against objectbox-dart
+
+A claim is covered upstream only when all of these hold:
+
+1. A test at the pinned tag asserts the claim's specific behavior. Cite it in
+   `validation/dart/COVERAGE.md` as `objectbox_test/test/<file>::<exact test
+   name>`.
+2. You have read the test body and can quote the `expect(...)` lines that
+   prove the claim. A grep hit, a comment, or a test that merely calls the
+   API is a candidate, not evidence. Never cite from memory.
+3. `python3 validation/check_upstream.py` resolves the locator, and `--run`
+   passes.
+
+If the upstream test asserts a weaker or different property, say so in the
+row and keep the local test. Claims of absence ("no `reset()`") are proven by
+the snippet analyzer, never by an upstream test.
+
+When bumping the pin: run `check_upstream.py --diff <old-tag> <new-tag>`,
+read every cited test whose body changed, and only then re-mark its row.
+
 ## Validate before committing
 
 - Both files in `.claude-plugin/` parse: `python3 -m json.tool <file>`.
@@ -75,3 +100,5 @@ data gets wrong. It is not a mirror of API documentation.
 - `validation/dart/run.sh` passes after touching `dart-flutter.md`, and every
   row of its "Quick reference" table has a row in
   `validation/dart/COVERAGE.md`.
+- `python3 validation/check_upstream.py` resolves every upstream locator at
+  the pinned tag (clones objectbox-dart into `validation/.cache/` once).

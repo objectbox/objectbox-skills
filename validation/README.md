@@ -9,14 +9,17 @@ oracle. Reading the docs settles only the first.
 | Claim type | Example | Oracle | Check |
 |---|---|---|---|
 | API shape | `nearestNeighborsF32`, `ToMany.reset()` | the analyzer, pinned version | `tool/check_snippets.dart` extracts every ` ```dart ` block from the skill file and analyzes it |
-| Runtime behavior | `date` reads back local | running code | `dart test`, one test per claim, named by skill section |
+| Runtime behavior | `date` reads back local | running code | an objectbox-dart test cited by name in `COVERAGE.md` and resolved by `check_upstream.py`, or a local `dart test` for what upstream does not assert |
 | Version, deprecation | `Sync.client` deprecated in 5.2.0 | CHANGELOG | recorded in `COVERAGE.md` with the version |
 | Environment, ops | ulimit on macOS, error 57 | issue tracker, docs, a CI job on that OS | evidence link in `COVERAGE.md` |
 | Idiom | `watch(triggerImmediately: true)` | official examples | the raw-file links in the skill file |
 | Architecture opinion | never poll | a human | marked `opinion` in `COVERAGE.md` |
 
 `check_links.py` verifies every relative link and heading anchor under
-`skills/`; `dart/run.sh` runs it too.
+`skills/`; `dart/run.sh` runs it too. `check_upstream.py` resolves the
+upstream test locators in `dart/COVERAGE.md` against objectbox-dart at the
+pinned tag (`--run` executes them, `--diff OLD NEW` shows cited tests that
+changed between two tags).
 
 Per binding: `validation/<binding>/` with a `run.sh`, a `COVERAGE.md` that has
 one row per row of the skill file's "Quick reference" table, and the tests.

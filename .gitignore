@@ -7,3 +7,4 @@ validation/dart/lib/libobjectbox*
 validation/dart/lib/objectbox.g.dart
 validation/dart/test/snippets/
 validation/dart/download/
+validation/.cache/

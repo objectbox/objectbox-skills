@@ -4,6 +4,9 @@ import 'package:test/test.dart';
 
 import 'test_store.dart';
 
+// @Transient() itself is asserted upstream
+// (objectbox_test/test/query_test.dart::ignore transient field).
+
 void main() {
   late TestStore ts;
   setUp(() async => ts = await TestStore.open());
@@ -18,12 +21,6 @@ void main() {
       expect(identical(first, second), isFalse);
       first.name = 'changed in memory only';
       expect(box.get(id)!.name, 'a');
-    });
-
-    test('a @Transient() field does not survive a re-read', () {
-      final box = ts.store.box<User>();
-      final id = box.put(User(name: 'a')..draft = 'unsaved');
-      expect(box.get(id)!.draft, isNull);
     });
 
     test('enum round-trips through the int mapping, unknown ids map to unknown',

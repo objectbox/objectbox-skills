@@ -5,6 +5,9 @@ import 'package:test/test.dart';
 
 import 'test_store.dart';
 
+// attach() and the "not initialized" error are asserted upstream
+// (objectbox_test/test/relations_test.dart::put); the tests here cover what
+// upstream does not assert.
 void main() {
   late TestStore ts;
   late Store store;
@@ -18,23 +21,7 @@ void main() {
   });
   tearDown(() => ts.dispose());
 
-  group('Relations relations', skip: needsSyncLib, () {
-    test('to-one write and read through .target', () {
-      final conv = Conversation(title: 'c');
-      final msg = Message(body: 'm')..conversation.target = conv;
-      msgBox.put(msg); // puts the new target too
-      expect(conv.id, isNonZero);
-      expect(msgBox.get(msg.id)!.conversation.target!.title, 'c');
-    });
-
-    test('adding to a backlink ToMany and putting the owner puts the target',
-        () {
-      final conv = Conversation()..messages.add(Message(body: 'm'));
-      convBox.put(conv);
-      expect(msgBox.count(), 1);
-      expect(msgBox.getAll().single.conversation.targetId, conv.id);
-    });
-
+  group('Relations', skip: needsSyncLib, () {
     test('removeAt dissolves the relation but does not delete the target', () {
       final conv = Conversation()..messages.add(Message(body: 'm'));
       convBox.put(conv);
@@ -62,36 +49,7 @@ void main() {
     });
   });
 
-  group('`attach()` attach', skip: needsSyncLib, () {
-    test('.target on a manually built entity needs attach(store)', () {
-      final conv = Conversation(title: 'c');
-      convBox.put(conv);
-
-      final msg = Message()..conversation.targetId = conv.id;
-      Object? error;
-      try {
-        msg.conversation.target;
-      } catch (e) {
-        error = e;
-      }
-      expect(error, isNotNull,
-          reason: 'reading .target without a store should fail');
-      // ignore: avoid_print
-      print('`attach()` detached .target error: $error');
-
-      msg.conversation.attach(store);
-      expect(msg.conversation.target!.title, 'c');
-      expect(msg.conversation.hasValue, isTrue);
-    });
-
-    test('entities returned from a Box are attached', () {
-      final conv = Conversation(title: 'c');
-      msgBox.put(Message()..conversation.target = conv);
-      expect(msgBox.getAll().single.conversation.target!.title, 'c');
-    });
-  });
-
-  group('Cascade deletes cascade delete', skip: needsSyncLib, () {
+  group('Cascade deletes', skip: needsSyncLib, () {
     bool deleteConversation(int conversationId) {
       return store.runInTransaction(TxMode.write, () {
         final conv = convBox.get(conversationId);
