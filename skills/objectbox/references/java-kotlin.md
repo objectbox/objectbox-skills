@@ -5,6 +5,28 @@ Kotlin; the Java equivalents follow the same rules. This file assumes the
 binding-agnostic contract in [SKILL.md](../SKILL.md). For Sync Server setup see
 [sync-server-setup.md](sync-server-setup.md).
 
+## Start from a working example, not from prose
+
+Follow "Start from an official example" in [SKILL.md](../SKILL.md): fetch an
+official example, copy its structure, then apply this file's rules on top.
+The files to fetch for Java/Kotlin:
+
+- **Sync-enabled entity, store bootstrap, sync client** — the Android Kotlin
+  client in the sync examples:
+  https://raw.githubusercontent.com/objectbox/objectbox-sync-examples/main/tasks/client-android-kotlin/app/src/main/java/io/objectbox/example/sync/Task.kt
+  https://raw.githubusercontent.com/objectbox/objectbox-sync-examples/main/tasks/client-android-kotlin/app/src/main/java/io/objectbox/example/sync/ObjectBox.kt
+  Java, JVM desktop: `tasks/client-java/app/src/main/java/io/objectbox/example/`
+  (`Task.java`, `TasksSyncDB.java`) in the same repo.
+- **Relations: `ToOne`, `ToMany`, `@Backlink`** (no Sync):
+  https://raw.githubusercontent.com/objectbox/objectbox-examples/main/kotlin-main/src/main/kotlin/io/objectbox/example/Note.kt
+  Java: `java-main/src/main/java/io/objectbox/example/Note.java` in the same repo.
+- **Vector search (`@HnswIndex`, `nearestNeighbors`)**:
+  https://raw.githubusercontent.com/objectbox/objectbox-examples/main/java-main-vector-search/src/main/java/io/objectbox/example/java/vectorsearch/City.java
+  https://raw.githubusercontent.com/objectbox/objectbox-examples/main/java-main-vector-search/src/main/java/io/objectbox/example/java/vectorsearch/CityRepository.java
+
+If you cannot fetch URLs, use the entity in section 1, the relation shape in
+section 2 and the queries in section 11 as your starting shapes.
+
 ## Before you write code
 
 1. **Check the installed version.** Deprecations are silent in the wrong
@@ -106,8 +128,7 @@ fun deleteConversation(conversationId: Long): Boolean {
     val conversation = conversationBox.get(conversationId) ?: return false
     store.runInTx {
         messageBox.query(Message_.conversationId.equal(conversationId)).build().remove()
-        contextBox.query(ContextPack_.conversationId.equal(conversationId)).build().remove()
-        summaryBox.query(Summary_.conversationId.equal(conversationId)).build().remove()
+        // ...one remove() per entity type that references Conversation
         conversationBox.remove(conversation.id)
     }
     return true
@@ -199,7 +220,6 @@ var embeddingVector: FloatArray? = null
 ```
 
 ```kotlin
-val maxCount = (limit * 8).coerceAtLeast(40)
 val q = chunkBox.query(
     Chunk_.embeddingVector.nearestNeighbors(queryVector, maxCount)
 ).build()
@@ -216,6 +236,9 @@ with Sync: [vector-search.md](vector-search.md).
 
 ## 11. Query lifecycle
 
+Short-lived (the default): `Query` implements `Closeable`, so scope it with
+`use {}`:
+
 ```kotlin
 conversationBox
     .query(Conversation_.userId.equal(userId))
@@ -224,21 +247,30 @@ conversationBox
     .use { q -> q.findFirst() }
 ```
 
+Long-lived (hot paths, repositories): build once with a placeholder value,
+keep it, and `setParameter` before each run:
+
+```kotlin
+private val byUser = conversationBox
+    .query(Conversation_.userId.equal(""))
+    .build()                                  // once, owned by the repository
+
+fun forUser(userId: String): List<Conversation> =
+    byUser.setParameter(Conversation_.userId, userId).find()
+// byUser.close() when the repository is closed
+```
+
 - Use the condition-based `box.query(condition)` API. The old chained builder
   (`box.query().equal(prop, value)`) still compiles but is not recommended for
   new projects since 4.0.1 — training data is full of it.
-- Use `use {}` for short-lived queries (`Query` implements `Closeable`).
-- Cache and reuse long-lived queries only inside repository/data-access code —
-  and not across threads: `Query` is not thread-safe.
+- An unclosed query is closed by its finalizer eventually; the API doc calls
+  that "expensive finalization". Close explicitly.
+- `Query` is not thread-safe: `query.copy()` per thread, or synchronize.
 
 ## 12. Sync client — "pull updates" is built in
 
-```kotlin
-val syncClient = Sync.client(boxStore)
-    .url("wss://your-server:9999")
-    .credentials(SyncCredentials.none())   // dev only
-    .buildAndStart()
-```
+Creating and starting a client is one builder chain, shown in the docs:
+https://sync.objectbox.io/sync-client.md
 
 - Sync sends and receives automatically once started. Do not add a fetch loop.
 - A started client cannot be started again — stop/close and build a new one.
@@ -288,7 +320,8 @@ carries stable UIDs that Sync depends on.
 | Manual cosine scan | unbounded, defeats HNSW | `nearestNeighbors(...)` |
 | `lateinit ToOne` on JVM | relation never initialized | inline `ToOne(this, ...)` |
 | Mirror `Long` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds` |
-| Unclosed query | leaks in long-running apps | `use {}` or close explicitly |
+| Unclosed query | closed only by its finalizer, "expensive finalization" | `use {}` or close explicitly |
+| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `setParameter` before each run (section 11) |
 | Old chained `query().equal(...)` builder | not recommended since 4.0.1 | condition-based `box.query(condition)` |
 | Treating score as similarity | score is a distance | invert before ranking |
 | Non-sync native lib + `@Sync` entities | writes fail: "sync has not been activated" | use the sync-enabled build |

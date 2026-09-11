@@ -150,7 +150,18 @@ Important invariants must be enforced by schema and write paths, not by comments
 **Do not**
 - bulk-load whole boxes and compute statistics in memory when a query can do it
 - use "get all" as the default read pattern
-- leave queries unclosed in long-running processes
+- leave queries unclosed: an open query holds native resources
+  (in languages with garbage collectors, it eventually gets finalized, but the timing is unpredictable)
+
+A built query has one of two lifetimes — choose deliberately:
+- **Short-lived** (the default): build, run, close in one scope, using the
+  binding's scoped form where it has one.
+- **Long-lived** (hot paths, repositories, observers): build once with
+  placeholder values, keep it in the data-access layer, change its parameters
+  before each run, and keep it open along with its owner (e.g. close when owner goes down).
+  Queries are not thread-safe: use one per thread — via the binding's query
+  copy/clone method, see the binding file — or synchronize if concurrency is
+  low.
 
 ## 5) Reactive updates
 

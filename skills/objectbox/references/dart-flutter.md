@@ -43,6 +43,7 @@ class Conversation {
   @Id() int id = 0;
   @Index() String userId = '';
   String title = '';
+  @Property(type: PropertyType.date)     // explicit: the generator warns otherwise
   DateTime updatedAt = DateTime.now();   // stored as UTC millis, read back local
 
   Conversation({this.id = 0, this.userId = '', this.title = ''});
@@ -57,9 +58,11 @@ Two traps in that snippet, both silent:
 - **`DateTime` round-trips as an instant, not as the object you put in.**
   Every date type stores a Unix timestamp, which carries no timezone —
   nothing drifts, whatever the device timezone. What differs is the
-  *read-back* flag: the default (`PropertyType.date`) returns a **local**
-  `DateTime`, `PropertyType.dateUtc` (5.1+) returns a **UTC** one. Match the
-  type to how the app handles time: local `DateTime.now()` with the default,
+  *read-back* flag: `PropertyType.date` returns a **local** `DateTime`,
+  `PropertyType.dateUtc` (5.1+) returns a **UTC** one. State the type
+  explicitly — an un-annotated `DateTime` defaults to `date` and the
+  generator warns about it. Match the type to how the app handles time:
+  local `DateTime.now()` with `date`,
   `DateTime.now().toUtc()` or server timestamps with `dateUtc`. Mixing them
   fails silently, because Dart's `==` requires the same moment *and* the
   same zone flag, so a value read back never equals the one you stored.
@@ -99,16 +102,10 @@ Rules:
   its box to refresh it. Dart's `ToMany` has no `reset()`; that is the Java
   API.
 
-Reading and writing:
+Reading, writing and adding follow the docs
+(https://docs.objectbox.io/relations.md). The silent one:
 
 ```dart
-final conv = message.conversation.target;             // read to-one
-message.conversation.target = conversation;           // write to-one
-box.put(message);
-
-conversation.messages.add(Message());                 // write to-many
-box.put(conversation);
-
 conversation.messages.removeAt(0);                    // dissolves the relation
 box.put(conversation);                                // does NOT delete the Message
 ```
@@ -213,77 +210,46 @@ Objects are rebuilt on every read (contract, section 2).
 
 ## 9. Reactive streams — never poll
 
-Dart exposes store-level change notifications through
-`store.entityChanges` (`Stream<List<Type>>`).
-Bridge it to a `Stream` rather than polling:
+A query's `watch()` is the change signal. It subscribes to
+`store.entityChanges` for the queried types and re-emits one `Query` instance
+on every change; `triggerImmediately: true` emits it on listen too, so the
+first frame has data. That is the whole bridge — do not hand-roll a
+`StreamController` over `entityChanges` for it.
 
 ```dart
-Stream<Conversation?> watchConversation(int id) {
-  late final StreamSubscription<List<Type>> subscription;
-  late final StreamController<Conversation?> controller;
+Stream<Conversation?> watchConversation(int id) => conversationBox
+    .query(Conversation_.id.equals(id))
+    .watch(triggerImmediately: true)
+    .map((query) => query.findFirst());
 
-  void emit() {
-    if (!controller.isClosed) {
-      controller.add(conversationBox.get(id));
-    }
-  }
-
-  controller = StreamController<Conversation?>(
-    onListen: () {
-      emit();                                   // current value immediately
-      subscription = store.entityChanges.listen((changedTypes) {
-        if (changedTypes.contains(Conversation)) emit();
-      });
-    },
-    onCancel: () async => subscription.cancel(),
-  );
-
-  return controller.stream;
-}
+Stream<List<Conversation>> watchConversations(String userId) =>
+    conversationBox
+        .query(Conversation_.userId.equals(userId))
+        .order(Conversation_.updatedAt, flags: Order.descending)
+        .watch(triggerImmediately: true)
+        .map((query) => query.find());
 ```
 
 Rules:
-- Check `!controller.isClosed` before adding — otherwise you throw after disposal.
-- Cancel the subscription in `onCancel`.
-- Filter `changedTypes` — `entityChanges` fires for every entity type.
-- Emit immediately on listen, so the first frame has data.
-
-For a filtered, ordered list rather than a single object, use the query's own
-watch form instead of `entityChanges` — `.watch(triggerImmediately: true)`
-emits the current value on listen, so you don't hand-roll that part.
-
-### With Riverpod
-
-```dart
-final objectBoxProvider = Provider<ObjectBox>((ref) {
-  throw UnimplementedError('Override in ProviderScope');
-});
-
-final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
-  return ConversationRepository(ref.watch(objectBoxProvider).store);
-});
-
-final conversationProvider = StreamProvider.family<Conversation?, int>((ref, id) {
-  return ref.watch(conversationRepositoryProvider).watchConversation(id);
-});
-```
-
-Invalidate after a mutation if the widget must re-read eagerly:
-`ref.invalidate(conversationProvider(id));`
+- Cancel the subscription when the widget or provider goes away.
+- `cancel()` stops the events but does **not** close the query: every event
+  carries the same `Query` instance, and it stays open. For short-lived
+  streams keep the last emitted query and `close()` it after cancelling.
+- Expose the stream through your state layer's stream primitive (a
+  `StreamProvider` in Riverpod). No invalidation after a mutation — the
+  `put()` already triggers the next event.
+- `store.entityChanges` (`Stream<List<Type>>`) fires for every entity type.
+  Reach for it only when you need a signal without a query, and filter on
+  `changedTypes.contains(...)`.
 
 ## 10. Vector search (HNSW)
 
-```dart
-@Entity()
-class Chunk {
-  @Id() int id = 0;
-  String text = '';
-
-  @HnswIndex(dimensions: 384, distanceType: VectorDistanceType.cosine)
-  @Property(type: PropertyType.floatVector)
-  List<double>? embedding;
-}
-```
+The entity shape is in the docs
+(https://docs.objectbox.io/on-device-vector-search.md) and in the cities
+example linked at the top of this file: `@HnswIndex(dimensions: ...,
+distanceType: ...)` on a `@Property(type: PropertyType.floatVector)
+List<double>?` field. The default distance is squared Euclidean — set
+`VectorDistanceType.cosine` explicitly for sentence embeddings.
 
 Query with the **Dart-specific** method name — it is *not* `nearestNeighbors`:
 
@@ -296,13 +262,12 @@ query.close();
 // score is a DISTANCE — lower is better
 ```
 
-- Default distance is (squared) Euclidean; set cosine explicitly for sentence
-  embeddings.
-
 Index design, filter over-fetching, stale detection, and how vectors interact
 with Sync: [vector-search.md](vector-search.md).
 
 ## 11. Query lifecycle
+
+Short-lived (the default): build, run, close in one scope.
 
 ```dart
 final query = conversationBox
@@ -316,8 +281,26 @@ try {
 }
 ```
 
-- Always close queries. Unclosed queries leak in long-running processes.
-- Cache and reuse long-lived queries only inside repository/data-access code.
+Long-lived (hot paths, repositories): build once with a placeholder value,
+keep it, and set the parameter before each run:
+
+```dart
+final byUser = conversationBox
+    .query(Conversation_.userId.equals(''))
+    .build();                                 // once, owned by the repository
+
+List<Conversation> forUser(String userId) =>
+    (byUser..param(Conversation_.userId).value = userId).find();
+// byUser.close() when the repository is disposed
+```
+
+- An unclosed query holds native resources until the garbage collector runs
+  its finalizer — unpredictable, so close explicitly. Using a closed query
+  throws `StateError`.
+- When a property appears in two conditions, give the condition an `alias`
+  and set the parameter by alias: "Reuse Queries and Parameters" in
+  https://docs.objectbox.io/queries.md
+- A query emitted by `watch()` is long-lived by construction — section 9.
 
 ## 12. Native library — sync vs. non-sync
 
@@ -488,9 +471,10 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Skipping `build_runner` after entity change | stale `objectbox.g.dart`; analyze/test fail | `dart run build_runner build` |
 | `nearestNeighbors(...)` | that is the Java/Kotlin name | `nearestNeighborsF32(...)` |
 | Treating score as similarity | score is a distance | invert before ranking |
-| Unclosed query | leaks in long-running processes | `query.close()` in a `finally` |
-| Polling instead of `store.entityChanges` | duplicates ObjectBox reactivity | bridge `entityChanges` to a Stream |
-| Adding to a closed StreamController | throws after widget disposal | check `!controller.isClosed` |
+| Unclosed query | holds native resources until GC finalization | `query.close()` in a `finally`; long-lived queries close with their owner |
+| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `param(...).value` before each run (section 11) |
+| Polling, or a hand-rolled `StreamController` over `entityChanges` | `watch()` already is that bridge | `box.query(...).watch(triggerImmediately: true)` |
+| Cancelling a `watch()` subscription and forgetting the query | `cancel()` does not close the emitted `Query` | keep the last emitted query, `close()` it after cancel |
 | Not filtering `changedTypes` | fires on every entity type | `changedTypes.contains(MyEntity)` |
 | State in a `@Transient()` field or a second enum copy | objects are rebuilt on every read; a second enum is a second index mapping | persisted property; one enum with a stable `int` mapping (section 8) |
 | Unused `objectbox` dependency in a package | native setup breaks fresh clones for zero benefit | remove it from `pubspec.yaml` |
