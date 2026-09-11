@@ -48,6 +48,11 @@ data gets wrong. It is not a mirror of API documentation.
 - **All cross-references are relative links** within `skills/objectbox/`
   (`references/x.md` from SKILL.md, `x.md` or `../SKILL.md` from a reference).
   No absolute GitHub URLs between files of this repo.
+- **Sections are referenced by link, never by number.** Only the contract
+  rules in SKILL.md are numbered; refer to them as `[rule N](../SKILL.md#n-title)`.
+  Binding and topic files use unnumbered headings; refer to a section with an
+  anchor link (`[Testing](#testing)`). `validation/check_links.py` verifies
+  every link and anchor, so a stale reference fails instead of drifting.
 - **Stub conventions:** keep the `> **Status: stub.**` banner with its
   fallback instructions (contract + official-docs URL). Completing a stub
   means a pass by someone who works in that binding; afterwards remove the
@@ -62,7 +67,8 @@ data gets wrong. It is not a mirror of API documentation.
 ## Validate before committing
 
 - Both files in `.claude-plugin/` parse: `python3 -m json.tool <file>`.
-- Every relative `.md` link resolves to an existing file.
+- `python3 validation/check_links.py` passes: every relative link resolves,
+  including `#anchors`.
 - SKILL.md stays well under 500 lines; deep material goes to `references/`.
 - Any new or changed API claim was checked against the official docs, not
   recalled.

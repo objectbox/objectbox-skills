@@ -20,8 +20,10 @@ The files to fetch for Dart/Flutter:
 - **Vector search, `@HnswIndex`** — the Dart-native cities example:
   https://raw.githubusercontent.com/objectbox/objectbox-dart/main/objectbox/example/dart-native/vectorsearch_cities/lib/model.dart
 
-If you cannot fetch URLs, use the entity in section 1, the relations in
-section 2 and the query in section 11 as your starting shapes.
+If you cannot fetch URLs, use the entity in
+[Entity declaration](#entity-declaration), the relations in
+[Relations](#relations) and the query in [Query lifecycle](#query-lifecycle) as
+your starting shapes.
 
 ## Before you write code
 
@@ -34,7 +36,7 @@ section 2 and the query in section 11 as your starting shapes.
    by appending `.md` — e.g. `https://docs.objectbox.io/queries.md`.
    Generated API reference: https://pub.dev/documentation/objectbox/latest/
 
-## 1. Entity declaration
+## Entity declaration
 
 ```dart
 @Entity()
@@ -55,14 +57,14 @@ Two traps in that snippet, both silent:
 - **`@Sync()` is class-level, never property-level.** On a `String`/`bool`/`int`
   field it either fails codegen or is silently ignored — the entity is then
   simply not synced and nothing tells you.
-- **`DateTime` comes back with the zone flag of its type, not of the value you stored.**
-  `PropertyType.date` returns local time, `PropertyType.dateUtc` returns UTC;
-  the stored instant is the same either way.
-  Match the type to how the app handles time, and compare with `isAtSameMomentAs`,
-  never `==` — Dart's `==` also compares the zone flag.
-  Details: https://docs.objectbox.io/property-types.md
+- **`DateTime` comes back with the zone flag of its type, not of the value you
+  stored.** `PropertyType.date` returns local time, `PropertyType.dateUtc`
+  returns UTC; the stored instant is the same either way. Match the type to how
+  the app handles time, and compare with `isAtSameMomentAs`, never `==` — Dart's
+  `==` also compares the zone flag. Details:
+  https://docs.objectbox.io/property-types.md
 
-## 2. Relations
+## Relations
 
 Dart declares relations as **`final` fields with no constructor arguments** —
 unlike the JVM binding, there is no `this`/`Entity_` reference to pass:
@@ -103,7 +105,7 @@ conversation.messages.removeAt(0);                    // dissolves the relation
 box.put(conversation);                                // does NOT delete the Message
 ```
 
-## 3. `attach()`
+## `attach()`
 
 `ToOne` reads its target lazily from the database. An entity you built yourself
 has no store, so `.target` cannot resolve.
@@ -117,7 +119,7 @@ message.conversation.attach(store);
   `.target`, attach first.
 - `hasValue` tells you whether a target is set without triggering a read.
 
-## 4. Do not mirror a relation as a plain `int`
+## Do not mirror a relation as a plain `int`
 
 Sync remaps IDs, including relation IDs.
 It does **not** remap a hand-maintained int field like e.g. `@Index() int conversationId = 0;`. 
@@ -126,7 +128,7 @@ Safe option: use only the `ToOne`, and query it via the generated property
 (e.g. `Message_.conversation`).
 
 
-## 5. Cascade deletes are manual
+## Cascade deletes are manual
 
 ObjectBox does not cascade. Removing a to-many entry dissolves the relationship;
 it does not delete the target. Orphans are silent.
@@ -152,7 +154,7 @@ bool deleteConversation(int conversationId) {
 - Include **every** referencing entity type.
 - `TxMode` has exactly two values: `TxMode.read` and `TxMode.write`.
 
-## 6. Avoid assignable IDs with Sync
+## Avoid assignable IDs with Sync
 
 Shared global IDs should be avoided in general;
 they collide if 2 clients increment from the same base ID.
@@ -174,7 +176,7 @@ class ManualDocument {
   longer put automatically — put them explicitly, and attach the box before
   modifying relations.
 
-## 7. Local-only entities in a sync store
+## Local-only entities in a sync store
 
 Entities without `@Sync()` are local-only.
 
@@ -187,9 +189,9 @@ Entities without `@Sync()` are local-only.
   data; or create a second, synced entity and migrate data in code. All are
   destructive for that type — back up first.
 
-## 8. Transient fields and enums
+## Transient fields and enums
 
-Objects are rebuilt on every read (contract, section 2).
+Objects are rebuilt on every read (contract [rule 2](../SKILL.md#2-modeling)).
 
 - `@Transient()` marks a field that is not stored: after `box.get()` it is
   back at its initializer, whatever you set before `put()`.
@@ -201,7 +203,7 @@ Objects are rebuilt on every read (contract, section 2).
 - One enum per concept, in the data layer. A second copy in a widget is a
   second index mapping.
 
-## 9. Reactive streams — never poll
+## Reactive streams — never poll
 
 A query's `watch()` is the change signal. It subscribes to
 `store.entityChanges` for the queried types and re-emits one `Query` instance
@@ -234,7 +236,7 @@ Rules:
   Reach for it only when you need a signal without a query, and filter on
   `changedTypes.contains(...)`.
 
-## 10. Vector search (HNSW)
+## Vector search (HNSW)
 
 The entity shape is in the docs
 (https://docs.objectbox.io/on-device-vector-search.md) and in the cities
@@ -257,7 +259,7 @@ query.close();
 Index design, filter over-fetching, stale detection, and how vectors interact
 with Sync: [vector-search.md](vector-search.md).
 
-## 11. Query lifecycle
+## Query lifecycle
 
 Closing, reuse and parameters are in the docs — "Close the query" and
 "Reuse Queries and Parameters" in https://docs.objectbox.io/queries.md
@@ -277,9 +279,9 @@ try {
 
 For a hot path build once and change parameters with `param(...).value`
 instead of rebuilding. A query emitted by `watch()` is long-lived by
-construction (section 9).
+construction ([Reactive streams](#reactive-streams--never-poll)).
 
-## 12. Native library — sync vs. non-sync
+## Native library — sync vs. non-sync
 
 The **sync-enabled** native library is a different artifact, not a flag.
 
@@ -309,7 +311,7 @@ not been activated for this store. (OBX_ERROR code 10001)
 - Read-only CLI tools should wrap bootstrap writes in try/catch.
 - Tests start a client against an unreachable loopback port (see Testing).
 
-## 13. Sync client API (5.2.0+)
+## Sync client API (5.2.0+)
 
 ```dart
 // Deprecated since 5.2.0 — recognise it, do not write it:
@@ -327,9 +329,10 @@ Rules:
   sync-enabled — check it first when debugging "sync has not been activated".
 - **Do not start a SyncClient in app code when sync is disabled.** Check the
   enabled flag *before* constructing the client, and remember that `@Sync()`
-  types are then read-only (section 12). A bogus URL plus `start()` is not a
-  disabled mode — it is a live client that tries to connect. That trick is for
-  tests only (section 14).
+  types are then read-only
+  ([Native library](#native-library--sync-vs-non-sync)). A bogus URL plus
+  `start()` is not a disabled mode — it is a live client that tries to connect.
+  That trick is for tests only ([Testing](#testing)).
 - Sync sends and receives automatically once started. Do not add a fetch loop.
 - Use sync event listeners for UI status, not polling.
 - `SyncCredentials.none()` pairs with a server started
@@ -337,7 +340,7 @@ Rules:
   anything else use the shared-secret credentials form and never commit the
   secret. See [sync-server-setup.md](sync-server-setup.md).
 
-## 14. Testing
+## Testing
 
 **Never open a real SyncClient in tests.** It is nondeterministic — connection
 races, port collisions — and hostile to CI.
@@ -372,11 +375,11 @@ tearDown(() async => handle.dispose());
 
 ### Case B — the test writes to `@Sync()` entities
 
-Case A is not enough: writes to `@Sync()` types fail until a SyncClient has
-been *started* (section 12). Install the sync-enabled library for the test
-process and start a client against a loopback port nothing listens on. It
-activates the write path, stays `SyncState.disconnected`, and never
-replicates:
+Case A is not enough: writes to `@Sync()` types fail until a SyncClient has been
+*started* ([Native library](#native-library--sync-vs-non-sync)). Install the
+sync-enabled library for the test process and start a client against a loopback
+port nothing listens on. It activates the write path, stays
+`SyncState.disconnected`, and never replicates:
 
 ```dart
 SyncClient? syncClient;
@@ -403,7 +406,7 @@ class in the package; do not invent one.
 - A green run of each test file *in isolation* does not prove the suite is safe.
   Run the full `flutter test` and confirm a clean, zero-exit teardown.
 
-## 15. macOS: the `ulimit` crash
+## macOS: the `ulimit` crash
 
 libwebsockets, used internally by ObjectBox Sync, fails when `ulimit -n` is
 `unlimited`, with `"problem getting process max files"`. Set a finite limit
@@ -413,7 +416,7 @@ before running anything that opens a sync store:
 ulimit -n 4096   # before dart test, dart run, flutter test
 ```
 
-## 16. Model file
+## Model file
 
 `lib/objectbox-model.json` carries stable UIDs that Sync depends on.
 
@@ -440,7 +443,7 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Adding `@Sync()` to an entity with data | unsupported migration | wipe server + clients, or model anew |
 | `Sync.client(...)` | deprecated in 5.2.0+ | `SyncClient(store, [url], [credentials])` |
 | SyncClient created while sync disabled | still attempts a TCP connection | check the flag first |
-| Tests connect to a real Sync Server | nondeterministic, CI-hostile | start a client on an unreachable loopback port (section 14) |
+| Tests connect to a real Sync Server | nondeterministic, CI-hostile | start a client on an unreachable loopback port ([Testing](#testing)) |
 | `--unsecured-no-authentication` beyond loopback | anyone on the network can read/write | shared secret, never committed |
 | Writing `@Sync()` entities without a *started* SyncClient | "sync has not been activated for this store", under both library variants | sync-enabled library plus `SyncClient.start()` |
 | `ulimit -n unlimited` on macOS | libwebsockets crashes | `ulimit -n 4096` |
@@ -451,7 +454,7 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Rebuilding the same query on every call in a hot path | build cost on every call | build once, `param(...).value` before each run |
 | Polling, or a hand-rolled `StreamController` over `entityChanges` | `watch()` already is that bridge | `box.query(...).watch(triggerImmediately: true)` |
 | Not filtering `changedTypes` | fires on every entity type | `changedTypes.contains(MyEntity)` |
-| State in a `@Transient()` field or a second enum copy | objects are rebuilt on every read; a second enum is a second index mapping | persisted property; one enum with a stable `int` mapping (section 8) |
+| State in a `@Transient()` field or a second enum copy | objects are rebuilt on every read; a second enum is a second index mapping | persisted property; one enum with a stable `int` mapping ([Transient fields and enums](#transient-fields-and-enums)) |
 | Unused `objectbox` dependency in a package | native setup breaks fresh clones for zero benefit | remove it from `pubspec.yaml` |
 | Sharing a test store across groups | cross-test pollution | one store per suite, or reset per group |
 | Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |

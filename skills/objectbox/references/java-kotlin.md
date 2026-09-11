@@ -24,8 +24,10 @@ The files to fetch for Java/Kotlin:
   https://raw.githubusercontent.com/objectbox/objectbox-examples/main/java-main-vector-search/src/main/java/io/objectbox/example/java/vectorsearch/City.java
   https://raw.githubusercontent.com/objectbox/objectbox-examples/main/java-main-vector-search/src/main/java/io/objectbox/example/java/vectorsearch/CityRepository.java
 
-If you cannot fetch URLs, use the entity in section 1, the relation shape in
-section 2 and the queries in section 11 as your starting shapes.
+If you cannot fetch URLs, use the entity in
+[Entity declaration](#entity-declaration), the relation shape in
+[ToOne relations](#toone-relations--the-jvm-initialization-trap) and the queries
+in [Query lifecycle](#query-lifecycle) as your starting shapes.
 
 ## Before you write code
 
@@ -38,7 +40,7 @@ section 2 and the queries in section 11 as your starting shapes.
 3. **Look up the API, don't recall it.** Any docs page can be fetched as
    Markdown by appending `.md` — e.g. `https://docs.objectbox.io/queries.md`.
 
-## 1. Entity declaration
+## Entity declaration
 
 ```kotlin
 @Entity
@@ -56,7 +58,7 @@ data class Conversation(
   is silently ignored — the entity is then simply not synced and nothing says so.
 - Index the properties you filter on.
 
-## 2. ToOne relations — the JVM initialization trap
+## ToOne relations — the JVM initialization trap
 
 **Wrong — `lateinit` breaks on Kotlin desktop/JVM:**
 
@@ -85,7 +87,7 @@ Rules:
   `@Transient @JvmField var __boxStore: BoxStore? = null` in every entity with
   relations, and always initialize `ToOne` inline — never `lateinit`.
 
-## 3. When to call `attach()`
+## When to call `attach()`
 
 `box.attach(entity)` sets `__boxStore` so relations can resolve and persist.
 
@@ -96,7 +98,7 @@ Rules:
   modifying relations on entities with `@Id(assignable = true)`.
 - Entities returned from a `Box` are already attached.
 
-## 4. Do not mirror a relation as a plain `Long`
+## Do not mirror a relation as a plain `Long`
 
 Sync remaps relation IDs. It does **not** remap a hand-maintained mirror field.
 
@@ -119,7 +121,7 @@ Note: a `ToOne` is stored internally as a generated `<relationName>Id` property.
 Querying `Message_.conversationId` when it *is* that backing ID is fine. What is
 forbidden is an additional, manually maintained mirror field.
 
-## 5. Cascade deletes are manual — and must be complete
+## Cascade deletes are manual — and must be complete
 
 ObjectBox does not cascade. Orphans are silent.
 
@@ -139,7 +141,7 @@ fun deleteConversation(conversationId: Long): Boolean {
 - Use `.build().remove()` — do not load-to-delete.
 - Include **every** referencing entity type.
 
-## 6. Assignable IDs with Sync
+## Assignable IDs with Sync
 
 ```kotlin
 @Entity
@@ -159,7 +161,7 @@ data class ManualDocument(
   automatic put of relation targets. Check whether a unique indexed property
   would do instead — the docs recommend that where viable.
 
-## 7. Local-only entities in a sync store
+## Local-only entities in a sync store
 
 Entities without `@Sync` are local-only.
 
@@ -172,17 +174,17 @@ Entities without `@Sync` are local-only.
   data; or create a second, synced entity and migrate data in code. All are
   destructive for that type — back up first.
 
-## 8. Transient fields and enums
+## Transient fields and enums
 
-Objects are rebuilt on every read (contract, section 2). `@Transient` marks a
-field that is not stored. Enums persist through
+Objects are rebuilt on every read (contract [rule 2](../SKILL.md#2-modeling)).
+`@Transient` marks a field that is not stored. Enums persist through
 `@Convert(converter = RoleConverter.class, dbType = Integer.class)` with a
-`PropertyConverter` that maps explicit ids. The docs are blunt: "Do not
-persist the enum's ordinal or name: both are unstable". Give the enum an
-`UNKNOWN` value for ids the converter does not recognize. Converter code:
+`PropertyConverter` that maps explicit ids. The docs are blunt: "Do not persist
+the enum's ordinal or name: both are unstable". Give the enum an `UNKNOWN` value
+for ids the converter does not recognize. Converter code:
 https://docs.objectbox.io/advanced/custom-types.md
 
-## 9. Reactive updates — no polling loops
+## Reactive updates — no polling loops
 
 If you feel the urge to write `while (true) { sleep(); query() }`: don't.
 
@@ -207,7 +209,7 @@ fun stopObserving() {
 - Keep a reference to the `DataSubscription` until cancelled.
 - For a plain "something changed" signal, use `BoxStore.subscribe(MyEntity::class.java)`.
 
-## 10. Vector search (HNSW)
+## Vector search (HNSW)
 
 ```kotlin
 @HnswIndex(
@@ -234,7 +236,7 @@ q.close()
 Index design, filter over-fetching, stale detection, and how vectors interact
 with Sync: [vector-search.md](vector-search.md).
 
-## 11. Query lifecycle
+## Query lifecycle
 
 Closing, reuse and parameters are in the docs — "Close the query" and
 "Reuse Queries and Parameters" in https://docs.objectbox.io/queries.md
@@ -255,7 +257,7 @@ conversationBox
   rebuilding. `Query` is not thread-safe: `query.copy()` per thread, or
   synchronize.
 
-## 12. Sync client — "pull updates" is built in
+## Sync client — "pull updates" is built in
 
 Creating and starting a client is one builder chain, shown in the docs:
 https://sync.objectbox.io/sync-client.md
@@ -272,7 +274,7 @@ https://sync.objectbox.io/sync-client.md
   anything else use the shared-secret credentials form and never commit the
   secret. See [sync-server-setup.md](sync-server-setup.md).
 
-## 13. Gradle — sync vs. non-sync plugin
+## Gradle — sync vs. non-sync plugin
 
 ```kotlin
 plugins {
@@ -286,7 +288,7 @@ shared module. The sync-enabled native library is a **different artifact**
 using the non-sync library with `@Sync` entities fails at write time with
 `"sync has not been activated"`.
 
-## 14. Model file
+## Model file
 
 `objectbox-models/default.json` (under `app/` in a default Android setup)
 carries stable UIDs that Sync depends on.

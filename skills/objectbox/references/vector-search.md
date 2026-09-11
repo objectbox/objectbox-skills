@@ -1,9 +1,9 @@
 # Vector search (HNSW) — design and use
 
 Cross-binding guide for ObjectBox on-device vector search. The hard constraints
-are in the SKILL.md contract (section 6); this file holds the design guidance,
-the sync interaction, and the per-binding API names. Entity and query snippets
-for your binding are in its own reference file.
+are in the SKILL.md contract ([rule 6](../SKILL.md#6-vector-search)); this file
+holds the design guidance, the sync interaction, and the per-binding API names.
+Entity and query snippets for your binding are in its own reference file.
 
 Official docs: https://docs.objectbox.io/on-device-vector-search.md
 
@@ -51,7 +51,8 @@ Available in Python, C, C++, Dart/Flutter, Java/Kotlin and Swift.
   other conditions are applied to the ANN candidates, so a small `maxCount`
   returns too few matches. A working heuristic from production use (the docs do
   not specify one): `maxCount = max(limit * 8, 40)`, then trim.
-- Close queries like any other query (see the contract, section 4).
+- Close queries like any other query (see the contract,
+  [rule 4](../SKILL.md#4-queries)).
 
 ## Vectors and Sync
 
