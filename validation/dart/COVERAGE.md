@@ -6,7 +6,7 @@ One row per row of the "Quick reference — common mistakes" table in
 `objectbox` **5.3.2** on Linux x64, 2026-09-08.
 
 The Upstream column cites objectbox-dart tests as `objectbox_test/test/<file>::<exact test name>`;
-`../check_upstream.py` resolves every such locator at the pinned tag and can run or diff them.
+`../check_upstream.py` resolves every such locator at the pinned tag and diffs them on pin bumps.
 A locator is only written after reading the test body; a grep hit is a candidate, not evidence.
 
 Status values: `verified <version>` (a local test, an upstream test or the analyzer proves it),

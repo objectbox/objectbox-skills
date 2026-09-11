@@ -80,16 +80,17 @@ A claim is covered upstream only when all of these hold:
 2. You have read the test body and can quote the `expect(...)` lines that
    prove the claim. A grep hit, a comment, or a test that merely calls the
    API is a candidate, not evidence. Never cite from memory.
-3. `python3 validation/check_upstream.py` resolves the locator, and `--run`
-   passes.
+3. `python3 validation/check_upstream.py` resolves the locator at the pinned
+   tag. Running the test is not needed: objectbox-dart's CI did, at that tag.
 
 If no upstream test asserts the claim, write one there: this repo holds no
 tests of its own. Until it is in a tagged release, the row says `pending
 upstream` with the test name and branch. Claims of absence ("no `reset()`") are proven by
 the snippet analyzer, never by an upstream test.
 
-When bumping the pin: run `check_upstream.py --diff <old-tag> <new-tag>`,
-read every cited test whose body changed, and only then re-mark its row.
+When bumping the pin: run `check_upstream.py --diff <new-tag>` (from the old
+pin), read every cited test whose body changed, and only then re-mark its
+row. The scheduled CI job does the same against `main` as an early warning.
 
 ## Validate before committing
 
@@ -105,4 +106,4 @@ read every cited test whose body changed, and only then re-mark its row.
 - `python3 validation/check_upstream.py` resolves every upstream locator at
   the pinned tag (clones objectbox-dart into `validation/.cache/` once).
 - `.gitlab-ci.yml` runs the same checks on every push; the scheduled
-  `upstream-main` job is advisory and may fail without blocking.
+  `upstream-drift` job is advisory and may fail without blocking.

@@ -1,7 +1,7 @@
 # Validates the skill's claims: every code snippet in the skill file compiles
 # against the pinned ObjectBox version, the coverage table matches the skill
-# file, links and anchors resolve, and the objectbox-dart tests cited in the
-# coverage table pass at the pinned tag. See validation/README.md.
+# file, links and anchors resolve, and every objectbox-dart test the coverage
+# table cites exists at the pinned tag. See validation/README.md.
 stages:
   - test
 
@@ -22,8 +22,6 @@ variables:
     - apt-get update && apt-get install --yes --no-install-recommends python3 git curl ca-certificates
   cache:
     paths:
-      - $CI_PROJECT_DIR/.pub-cache/bin/
-      - $CI_PROJECT_DIR/.pub-cache/global_packages/
       - $CI_PROJECT_DIR/.pub-cache/hosted/
     key: "linux-x64-dart-$DART_VERSION-pub-cache"
 
@@ -37,27 +35,19 @@ validate:
     - python3 -m json.tool .claude-plugin/plugin.json > /dev/null
     - python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
     - cd validation/dart
-    - dart pub get
     - dart format --output=none --set-exit-if-changed lib tool
-    - ./run.sh --static
+    - ./run.sh
     - dart analyze lib tool
 
-# Runs the objectbox-dart tests cited in COVERAGE.md, at the pinned tag, from a
-# checkout the script prepares (pub get, code generation, native library).
-upstream-tests:
-  extends: .common
-  stage: test
-  script:
-    - python3 validation/check_upstream.py --prepare --run
-
-# Scheduled canary: the same tests against objectbox-dart main. Advisory only;
-# a failure means a cited behavior may change in the next release, so read the
-# test body before bumping the pin (see AGENTS.md).
-upstream-main:
+# Scheduled drift check: have the cited objectbox-dart tests changed or gone
+# missing between the pinned tag and main? Running them would prove nothing,
+# objectbox-dart's CI already does; a changed body means a claim's evidence is
+# moving, so read the test before bumping the pin (see AGENTS.md). Advisory.
+upstream-drift:
   extends: .common
   stage: test
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
-    - python3 validation/check_upstream.py --ref origin/main --prepare --run
+    - python3 validation/check_upstream.py --diff origin/main
