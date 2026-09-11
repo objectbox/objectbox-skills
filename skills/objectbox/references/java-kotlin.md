@@ -26,8 +26,8 @@ The files to fetch for Java/Kotlin:
 
 If you cannot fetch URLs, use the entity in
 [Entity declaration](#entity-declaration), the relation shape in
-[ToOne relations](#toone-relations--the-jvm-initialization-trap) and the queries
-in [Query lifecycle](#query-lifecycle) as your starting shapes.
+[Kotlin JVM](#kotlin-jvm--initialize-relations-yourself) and the queries in
+[Query lifecycle](#query-lifecycle) as your starting shapes.
 
 ## Before you write code
 
@@ -54,74 +54,78 @@ data class Conversation(
 )
 ```
 
-- `@Sync` is **class-level**. Placing it on a property either fails codegen or
-  is silently ignored — the entity is then simply not synced and nothing says so.
+- `@Sync` is class-level. Its annotation target is the type, so the compiler rejects it on a
+  property; there is no silent variant of this mistake in Java/Kotlin.
 - Index the properties you filter on.
+- A `data class` is fine for scalar fields. Once the entity owns relations, use a regular class:
+  see [Relations](#relations).
 
-## ToOne relations — the JVM initialization trap
+## Relations
 
-**Wrong — `lateinit` breaks on Kotlin desktop/JVM:**
+The shapes are in the docs (https://docs.objectbox.io/relations.md) and in the Note example linked
+at the top. What training data gets wrong:
+
+- **A `ToOne` is stored as a virtual `<name>Id` property.** `Message_.conversationId` is the
+  generated query property of the relation `conversation`; querying it is fine.
+  Declaring `var conversationId: Long = 0` with exactly that name exposes the same value.
+  It is not a second field.
+- **A loaded `ToMany` is cached.** It does not see relations added or removed elsewhere until you
+  call `reset()` on it or re-read the owner from its box.
+- **Removing from a `ToMany` dissolves the relation only.** The target stays in its box;
+  remove it explicitly if it should go.
+- **Data classes:** the docs' warning is that two data-class objects with equal property values
+  are equal and share a hash code, and `ToMany` tracks its changes in a `HashMap`.
+  A `lateinit` relation also has to move out of the constructor into the class body.
+  Give entities that own relations a regular class.
+
+## Kotlin JVM — initialize relations yourself
+
+The ObjectBox Gradle plugin transforms entity classes to initialize `ToOne`/`ToMany` fields and to
+add the `__boxStore` field. That transformation covers Android projects and Java JVM projects.
+It does not cover Kotlin JVM projects (Linux, macOS, Windows desktop). There, the shape the docs
+show for Android
 
 ```kotlin
-class Message(...) {
-    @Transient @JvmField var __boxStore: BoxStore? = null
-    lateinit var conversation: ToOne<Conversation>   // never initialized
-}
+lateinit var conversation: ToOne<Conversation>     // Android and Java JVM only
 ```
 
-**Correct — inline initialization:**
+is never initialized: the first access, including the one inside `box.put()`, throws
+`UninitializedPropertyAccessException`. Write what the transformer would have written:
 
 ```kotlin
-class Message(...) {
-    @Transient @JvmField var __boxStore: BoxStore? = null
+@Entity
+class Message(@Id var id: Long = 0, var body: String = "") {
     var conversation: ToOne<Conversation> = ToOne(this, Message_.conversation)
+    // ToMany takes the same form: ToMany(this, Conversation_.messages)
+
+    @JvmField @Transient var __boxStore: BoxStore? = null   // in every entity with relations
 }
 ```
-
-Rules:
-- The trigger is the **build**, not the class shape: builds apply a
-  bytecode transformation that wires relations up — there,
-  `lateinit var conversation: ToOne<Conversation>` is the documented pattern.
-  Kotlin JVM desktop builds (Linux/macOS/Windows) have no such transformation.
-- On Kotlin JVM desktop: declare
-  `@Transient @JvmField var __boxStore: BoxStore? = null` in every entity with
-  relations, and always initialize `ToOne` inline — never `lateinit`.
 
 ## When to call `attach()`
 
-`box.attach(entity)` sets `__boxStore` so relations can resolve and persist.
+`box.attach(entity)` sets the entity's `__boxStore` so its relations can resolve. Needed:
 
-- Attach before **modifying** a `ToOne`/`ToMany` on Kotlin JVM desktop (no
-  bytecode transformation) — in general, on any entity you constructed
-  yourself rather than read from a box.
-- Attach before `setAndPutTarget()` on a new, not-yet-put object, and before
-  modifying relations on entities with `@Id(assignable = true)`.
-- Entities returned from a `Box` are already attached.
+- before resolving a relation from the database on an object you constructed yourself and have not
+  put; otherwise `DbDetachedException`: "Cannot resolve relation for detached entities, call
+  box.attach(entity) beforehand."
+- before `setAndPutTarget()` on a new, not-yet-put owner.
+- before modifying relations on an entity with `@Id(assignable = true)`.
+
+Not needed for a new object you `put()`: the generated cursor puts an unsaved `ToOne` target
+first, attaches the object, then applies its `ToMany` changes.
+Objects returned from a box are attached.
 
 ## Do not mirror a relation as a plain `Long`
 
-Sync remaps relation IDs. It does **not** remap a hand-maintained mirror field.
+Sync remaps IDs, including relation IDs.
+It does **not** remap a hand-maintained field such as `@Index var convId: Long = 0`
+that you fill from `conversation.targetId`.
 
-```kotlin
-// Risky — dual tracking
-class Message(
-    @Index var conversationId: Long = 0,   // manual mirror
-    ...
-) {
-    var conversation: ToOne<Conversation> = ToOne(this, Message_.conversation)
-}
-```
+Safe option: use only the `ToOne`, and query it through its generated property
+(`Message_.conversationId`, see [Relations](#relations)).
 
-Safe options:
-- **A:** use only the `ToOne`.
-- **B:** keep the plain `Long` only if the parent uses
-  `@Sync(sharedGlobalIds = true)` and you can guarantee uniqueness.
-
-Note: a `ToOne` is stored internally as a generated `<relationName>Id` property.
-Querying `Message_.conversationId` when it *is* that backing ID is fine. What is
-forbidden is an additional, manually maintained mirror field.
-
-## Cascade deletes are manual — and must be complete
+## Cascade deletes are manual
 
 ObjectBox does not cascade. Orphans are silent.
 
@@ -141,12 +145,18 @@ fun deleteConversation(conversationId: Long): Boolean {
 - Use `.build().remove()` — do not load-to-delete.
 - Include **every** referencing entity type.
 
-## Assignable IDs with Sync
+## Avoid assignable IDs with Sync
+
+Shared global IDs should be avoided in general;
+they collide if two clients increment from the same base ID.
+A valid use case would be IDs provided from an external system.
+The docs on `@Id(assignable = true)`: "This is not recommended.
+Check if using a unique indexed property is a viable alternative."
 
 ```kotlin
 @Entity
 @Sync(sharedGlobalIds = true)
-data class ManualDocument(
+class ManualDocument(
     @Id(assignable = true) var id: Long = 0,
     ...
 )
@@ -154,20 +164,18 @@ data class ManualDocument(
 
 - `@Id(assignable = true)` alone is **not** enough — without
   `sharedGlobalIds = true` IDs may be remapped.
-- `sharedGlobalIds` is immutable after first deployment.
+- The reverse holds too: with `sharedGlobalIds = true` use assignable IDs, or, in the words of the
+  annotation's docs, "two Sync clients are likely to overwrite each others Objects".
 - Only use it when global uniqueness across devices is guaranteed.
 - Assignable IDs break new-vs-persisted detection: put such objects
-  immediately, attach the box before modifying their relations, and expect no
-  automatic put of relation targets. Check whether a unique indexed property
-  would do instead — the docs recommend that where viable.
+  immediately and attach the box before modifying their relations.
 
 ## Local-only entities in a sync store
 
 Entities without `@Sync` are local-only.
 
-- Do not create relations across the sync/local boundary.
-- A plain ID reference from a local entity to a synced one is only safe if the
-  synced entity uses `sharedGlobalIds = true`.
+- Do not create relations across the sync/local boundary. The docs allow relations "between
+  sync-enabled or non-sync entities, not across this boundary".
 - **You cannot flip an existing entity to `@Sync` in place.** Options: while
   still in development, add the annotation and wipe the databases; or assign
   the entity a new UID (keeping the name), which drops that type's existing
@@ -178,25 +186,26 @@ Entities without `@Sync` are local-only.
 
 Objects are rebuilt on every read (contract [rule 2](../SKILL.md#2-modeling)).
 `@Transient` marks a field that is not stored. Enums persist through
-`@Convert(converter = RoleConverter.class, dbType = Integer.class)` with a
-`PropertyConverter` that maps explicit ids. The docs are blunt: "Do not persist
-the enum's ordinal or name: both are unstable". Give the enum an `UNKNOWN` value
-for ids the converter does not recognize. Converter code:
-https://docs.objectbox.io/advanced/custom-types.md
+`@Convert(converter = RoleConverter::class, dbType = Int::class)` with a
+`PropertyConverter<Role?, Int?>` that maps explicit ids. The docs are blunt: "Do not persist
+the enum's ordinal or name: Both are unstable, and can easily change the next time you edit
+your enum definitions." Give the enum an `UNKNOWN` value for ids the converter does not recognize.
+Converter code: https://docs.objectbox.io/advanced/custom-types.md
 
-## Reactive updates — no polling loops
+## Reactive updates — never poll
 
-If you feel the urge to write `while (true) { sleep(); query() }`: don't.
+A query's `subscribe()` is the change signal. By default it delivers the current result immediately
+and again after every change; `onlyChanges()` skips the first delivery, `single()` stops after it.
 
 ```kotlin
 private var subscription: DataSubscription? = null
 private var query: Query<Conversation>? = null
 
 fun startObserving(onUpdate: (List<Conversation>) -> Unit) {
-    query = conversationBox.query(Conversation_.status.equal("active")).build()
-    subscription = query!!
-        .subscribe()
-        // .on(AndroidScheduler.mainThread())   // Android UI thread
+    val q = conversationBox.query(Conversation_.status.equal("active")).build()
+    query = q
+    subscription = q.subscribe()
+        // .on(AndroidScheduler.mainThread())   // Android: deliver on the UI thread
         .observer { data -> onUpdate(data) }
 }
 
@@ -206,20 +215,28 @@ fun stopObserving() {
 }
 ```
 
-- Keep a reference to the `DataSubscription` until cancelled.
-- For a plain "something changed" signal, use `BoxStore.subscribe(MyEntity::class.java)`.
+Rules:
+- Keep a reference to the `DataSubscription`, or it is garbage collected and the observer stops.
+  `cancel()` it when the owner goes away.
+- `cancel()` does not close the `Query`; close that as well. Cancel every subscription before
+  `store.close()`, or the store waits a second and prints "ObjectBox thread pool not terminated in
+  time. Ensure all async calls have completed and subscriptions are cancelled before closing the
+  Store."
+- The observer runs on an internal background thread unless you set `.on(...)`.
+- A query subscription fires on any change to the queried entity's box, regardless of the query's
+  conditions. Filter cheaply in the observer if that matters.
+- For a plain "something changed" signal, use `BoxStore.subscribe(MyEntity::class.java)`;
+  `subscribe()` without a class fires for every entity type.
+- Kotlin with coroutines: `query.subscribe().toFlow()`, `query.flow()` and
+  `store.flow(MyEntity::class.java)` wrap the same subscription in a `Flow`
+  (`objectbox-kotlin`; the coroutines dependency is yours to add).
 
 ## Vector search (HNSW)
 
-```kotlin
-@HnswIndex(
-    dimensions = 384,
-    distanceType = VectorDistanceType.COSINE,
-    neighborsPerNode = 30,
-    indexingSearchCount = 200
-)
-var embeddingVector: FloatArray? = null
-```
+The entity shape is in the docs (https://docs.objectbox.io/on-device-vector-search.md) and in the
+City example linked at the top: `@HnswIndex(dimensions = ..., distanceType = ...)` on a
+`FloatArray?` property. The default distance is Euclidean (squared) — set
+`VectorDistanceType.COSINE` explicitly for sentence embeddings.
 
 ```kotlin
 val q = chunkBox.query(
@@ -229,9 +246,6 @@ val results = q.findWithScores()
 q.close()
 // score is a DISTANCE — lower is better
 ```
-
-- Default distance is (squared) Euclidean. For sentence embeddings set cosine
-  explicitly.
 
 Index design, filter over-fetching, stale detection, and how vectors interact
 with Sync: [vector-search.md](vector-search.md).
@@ -252,23 +266,43 @@ conversationBox
 
 - Use the condition-based `box.query(condition)` API. The old chained builder
   (`box.query().equal(prop, value)`) still compiles but is not recommended for
-  new projects since 4.0.1 — training data is full of it.
+  new projects since 4.0.1 — training data is full of it. The Kotlin
+  `box.query { equal(prop, value) }` block extension is that same old API.
 - For a hot path build once and `setParameter` before each run instead of
-  rebuilding. `Query` is not thread-safe: `query.copy()` per thread, or
-  synchronize.
+  rebuilding. Alias a condition (`.alias("name")`) when the same property appears twice.
+- `Query` is not thread-safe: `query.copy()` or a `QueryThreadLocal` per thread, build a new
+  query, or synchronize.
 
-## Sync client — "pull updates" is built in
+## Sync client
 
-Creating and starting a client is one builder chain, shown in the docs:
-https://sync.objectbox.io/sync-client.md
+```kotlin
+// Deprecated since 5.2.0 — recognise it, do not write it:
+//   Sync.client(store, "ws://host:port", SyncCredentials.none()).build()
 
+// Current:
+val syncClient = Sync.client(store)
+    .url("ws://host:port")
+    .credentials(SyncCredentials.none())
+    .buildAndStart()                  // or build() now and start() later
+```
+
+Unlike Dart, `Sync.client` itself is current here; only the URL and credentials arguments moved
+into the builder. Training data is full of the old form.
+
+Rules:
+- One client per store. A second `build()` on the same store throws `IllegalStateException`
+  ("The given store is already associated with a Sync client, close it first");
+  `close()` clears the association.
+- A started client cannot be started again, and a closed one throws on `start()`.
+  Stop and close it and build a new one.
 - Sync sends and receives automatically once started. Do not add a fetch loop.
-- A started client cannot be started again — stop/close and build a new one.
 - `Sync.isAvailable()` tells you whether the loaded native library is
   sync-enabled — check it first when debugging.
-- Close the sync client **before** closing the store — the reverse order is
-  undefined behavior.
-- Use event listeners for connection status in the UI, not polling.
+- `BoxStore.close()` does not close the client for you. Close the client first
+  (contract [rule 7](../SKILL.md#7-sync)); the docs: "Closing the store with a still running sync
+  client results in undefined behavior (e.g. crashes)."
+- Use the builder's listeners (`loginListener`, `connectionListener`, ...) for UI status,
+  not polling.
 - `SyncCredentials.none()` pairs with a server started
   `--unsecured-no-authentication`, which is **loopback development only**. For
   anything else use the shared-secret credentials form and never commit the
@@ -284,14 +318,85 @@ plugins {
 
 Apply native runtimes in the consuming modules (Android / desktop), not in a
 shared module. The sync-enabled native library is a **different artifact**
-(`objectbox-sync-<platform>` instead of `objectbox-<platform>`), not a flag —
-using the non-sync library with `@Sync` entities fails at write time with
-`"sync has not been activated"`.
+(`objectbox-sync-<platform>` instead of `objectbox-<platform>`), not a flag;
+the sync plugin adds the one for your platform.
+
+### The `@Sync` write constraint
+
+Writes to `@Sync` types are rejected until a Sync client has been **started** for the store:
+
+```
+java.lang.IllegalStateException: Can not modify object of sync-enabled type "Conversation"
+because sync has not been activated for this store.
+```
+
+- `build()` alone does not activate writes; `start()` or `buildAndStart()` does.
+  The server does not have to be reachable.
+- `stop()` leaves writes active; `close()` deactivates them again.
+- Under the non-sync library nothing can activate them: `Sync.isAvailable()` is false and
+  `Sync.client(store)` throws `FeatureNotAvailableException` before it builds anything.
+
+## Testing
+
+### The store
+
+JVM tests — Android local unit tests and desktop alike — need the JVM native library:
+`io.objectbox:objectbox-linux`, `-macos` and `-windows` as `testImplementation`
+(https://docs.objectbox.io/android/android-local-unit-tests.md); newer plugin versions add the
+one for the current OS themselves. Tests that write `@Sync` entities need the sync variant,
+`objectbox-sync-<platform>`, instead.
+
+One store per test in a temp directory, deleted in teardown — the recipe ObjectBox's own tests use:
+
+```kotlin
+private lateinit var dir: File
+private lateinit var store: BoxStore
+
+@Before fun setUp() {
+    dir = Files.createTempDirectory("obx-test").toFile()
+    store = MyObjectBox.builder().directory(dir).build()
+}
+
+@After fun tearDown() {
+    store.close()
+    BoxStore.deleteAllFiles(dir)
+}
+```
+
+`MyObjectBox.builder().inMemory("test").build()` skips the file system altogether.
+Cancel subscriptions before `store.close()` ([Reactive updates](#reactive-updates--never-poll)).
+
+### Writing `@Sync` entities without a server
+
+A real `SyncClient` in tests is fine. Build it against a loopback URL nothing listens on and start
+it: writes are activated ([write constraint](#the-sync-write-constraint)), the state goes
+`CREATED` to `STARTED`, and nothing is replicated. No port, as in ObjectBox's own tests, so
+parallel suites cannot collide.
+
+```kotlin
+val syncClient = Sync.client(store)
+    .url("ws://127.0.0.1")
+    .credentials(SyncCredentials.none())
+    .buildAndStart()
+// ... run the tests ...
+syncClient.close()   // in tearDown, before store.close()
+```
+
+`SyncClient` is `Closeable`: `use {}` in Kotlin, try-with-resources in Java.
+
+### Against a real server
+
+- **Sync is asynchronous.** Do not sleep and assert. `awaitFirstLogin(millis)` returns once the
+  first login attempt got a response (it also starts the client if needed); check `isLoggedIn()`
+  after it.
+- **Teardown order:** close the client, stop the server, then close and delete the store.
+- Server-side setup — ports, data directory, the model file — is in
+  [sync-server-setup.md](sync-server-setup.md).
 
 ## Model file
 
 `objectbox-models/default.json` (under `app/` in a default Android setup)
-carries stable UIDs that Sync depends on.
+carries stable UIDs that Sync depends on. It is written and updated on build.
 
 - Commit it.
 - Never delete or regenerate it to fix an error.
@@ -304,16 +409,33 @@ carries stable UIDs that Sync depends on.
 
 | Mistake | Why it breaks | Fix |
 |---|---|---|
-| `@Sync` on a property | class-level annotation; silently not synced | move it to the class |
-| Polling loop to "refresh" | duplicates observers, wastes CPU | `Query.subscribe()` / `BoxStore.subscribe()` |
-| Custom "pull updates" job | duplicates Sync, races | start Sync, listen to events |
-| Manual cosine scan | unbounded, defeats HNSW | `nearestNeighbors(...)` |
-| `lateinit ToOne` on JVM | relation never initialized | inline `ToOne(this, ...)` |
-| Mirror `Long` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds` |
-| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `setParameter` before each run |
-| Old chained `query().equal(...)` builder | not recommended since 4.0.1 | condition-based `box.query(condition)` |
-| Treating score as similarity | score is a distance | invert before ranking |
-| Non-sync native lib + `@Sync` entities | writes fail: "sync has not been activated" | use the sync-enabled build |
-| Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |
+| `lateinit var x: ToOne<X>` on Kotlin JVM | no bytecode transformation there; never initialized | `ToOne(this, X_.x)` inline plus `__boxStore` ([Kotlin JVM](#kotlin-jvm--initialize-relations-yourself)) |
+| Resolving a relation on a self-built, not-put object | `DbDetachedException` | `box.attach(entity)` first |
+| `setAndPutTarget()` on a not-yet-put owner | no store to put through | attach first |
+| Mirror `Long` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne`; query `X_.<name>Id` |
+| Expecting `remove()` on a `ToMany` to delete the target | it only dissolves the relation | remove the target from its box |
+| Reading a `ToMany` after changes made elsewhere | loaded list is cached | `reset()` or re-read the owner |
+| `data class` entity with a `ToMany` | equal objects share a hash; `ToMany` tracks changes in a `HashMap` | regular class for relation owners |
+| Cascade delete without a transaction | partial deletes leave orphans | `store.runInTx {}` |
+| `@Id(assignable = true)` | not recommended; breaks new-vs-persisted detection | unique indexed property; else put immediately, attach first |
 | Adding `@Sync` to an entity with data | unsupported migration | wipe server + clients, or model anew |
 | Persisting an enum's `ordinal()` or `name()` | both change when the enum is edited | `@Convert` with explicit ids and an `UNKNOWN` value |
+| Polling loop to "refresh" | `subscribe()` already is that signal | `Query.subscribe()` / `BoxStore.subscribe()` |
+| Expecting `subscribe()` to fire only on changes | it delivers the current result first | `onlyChanges()` |
+| Touching the UI from an observer | runs on a background thread | `.on(AndroidScheduler.mainThread())` |
+| `subscription.cancel()` without `query.close()` | the query stays open | close both |
+| Subscriptions alive at `store.close()` | "thread pool not terminated in time" | cancel first |
+| Manual cosine scan | unbounded, defeats HNSW | `nearestNeighbors(...)` |
+| `nearestNeighborsF32(...)` | that is the Dart name | `nearestNeighbors(...)` |
+| Treating score as similarity | score is a distance | invert before ranking |
+| Rebuilding the same query on every call in a hot path | build cost on every call | build once, `setParameter` before each run |
+| One `Query` used from several threads | not thread-safe | `copy()` or `QueryThreadLocal` |
+| Old chained `query().equal(...)` or Kotlin `box.query { }` | old API, not recommended since 4.0.1 | condition-based `box.query(condition)` |
+| `Sync.client(store, url, credentials)` | deprecated in 5.2.0 | `Sync.client(store).url(...).credentials(...)` |
+| Second `Sync.client(store)...build()` on one store | `IllegalStateException` | close the first client |
+| `start()` on a started or closed client | cannot be restarted; closed throws | build a new client |
+| Writing `@Sync` entities without a *started* client | "sync has not been activated"; `build()` is not enough | `buildAndStart()` or `start()` ([write constraint](#the-sync-write-constraint)) |
+| `store.close()` before `syncClient.close()` | undefined behavior; the store does not close the client | close the client first |
+| Non-sync plugin/library with `@Sync` entities | `Sync.client()` throws `FeatureNotAvailableException`; writes can never be activated | `id("io.objectbox.sync")`, `objectbox-sync-<platform>` |
+| JVM unit test without a JVM native library | nothing to load | `objectbox-linux/-macos/-windows` as `testImplementation` |
+| Stale server model | clients rejected (`UNSUPPORTED_DATA_MODEL`) | give the server the new model file |
