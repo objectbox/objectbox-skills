@@ -35,6 +35,9 @@ validate:
     - python3 -m json.tool .claude-plugin/plugin.json > /dev/null
     - python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
     - cd validation/dart
+    # Resolve packages first: without package_config.json the formatter ignores
+    # the package's language version and applies the newest style.
+    - dart pub get
     - dart format --output=none --set-exit-if-changed lib tool
     - ./run.sh
     - dart analyze lib tool
