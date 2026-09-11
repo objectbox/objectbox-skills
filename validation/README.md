@@ -9,7 +9,7 @@ oracle. Reading the docs settles only the first.
 | Claim type | Example | Oracle | Check |
 |---|---|---|---|
 | API shape | `nearestNeighborsF32`, `ToMany.reset()` | the analyzer, pinned version | `tool/check_snippets.dart` extracts every ` ```dart ` block from the skill file and analyzes it |
-| Runtime behavior | `date` reads back local | running code | an objectbox-dart test cited by name in `COVERAGE.md` and resolved by `check_upstream.py`, or a local `dart test` for what upstream does not assert |
+| Runtime behavior | `date` reads back local | running code | an objectbox-dart test cited by name in `COVERAGE.md`, resolved and run by `check_upstream.py`; missing ones are added upstream |
 | Version, deprecation | `Sync.client` deprecated in 5.2.0 | CHANGELOG | recorded in `COVERAGE.md` with the version |
 | Environment, ops | ulimit on macOS, error 57 | issue tracker, docs, a CI job on that OS | evidence link in `COVERAGE.md` |
 | Idiom | `watch(triggerImmediately: true)` | official examples | the raw-file links in the skill file |
@@ -28,14 +28,18 @@ Only `dart/` exists so far.
 ## Dart
 
 ```bash
-validation/dart/run.sh             # sync-enabled native library, all tests
-validation/dart/run.sh --non-sync  # plain library; @Sync() write tests skip
+validation/dart/run.sh            # all checks, incl. the cited upstream tests
+validation/dart/run.sh --static   # everything except running upstream tests
 ```
 
-`run.sh` installs the ObjectBox C library matching the `objectbox` version
-pinned in `pubspec.yaml` into `lib/`, runs code generation, analyzes the skill
-snippets, then runs the tests. Bump the pin deliberately; `COVERAGE.md`
-records the version each claim was verified against.
+`run.sh` runs code generation for the snippet fixtures, analyzes every code
+snippet of the skill file against the pinned `objectbox` version, checks the
+coverage table and the links, then resolves every upstream locator against
+objectbox-dart at the pinned tag and runs those tests from a checkout in
+`validation/.cache/` (`check_upstream.py --prepare --run`). Bump the pin
+deliberately; `COVERAGE.md` records the version each claim was verified
+against, and `check_upstream.py --diff OLD NEW` shows which cited tests
+changed.
 
 Layout:
 
@@ -43,5 +47,7 @@ Layout:
 - `lib/snippet_context.dart` — free variables the snippets use without
   declaring (`store`, `conversationBox`, ...). Analyzed, never run.
 - `tool/check_snippets.dart` — the snippet extractor and analyzer run.
-- `test/*_test.dart` — behavior tests; `test/test_store.dart` is the
-  per-test store with the disconnected `SyncClient` from the Testing section.
+- `tool/check_coverage.dart` — quick-reference rows vs. `COVERAGE.md`.
+
+There are no tests in this repository: behavior is asserted by
+objectbox-dart's own suite, and what it did not assert was added there.

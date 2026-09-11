@@ -42,8 +42,9 @@ data gets wrong. It is not a mirror of API documentation.
   never keep templates here.
 - **Docs prove existence, not behavior.** Checking a docs page settles only
   whether an API exists. A claim that something *happens* — fails silently,
-  is ignored, drifts, leaks — needs a test under `validation/<binding>/` or
-  an explicit `unverified` row in that binding's `COVERAGE.md`. Hedged
+  is ignored, drifts, leaks — needs an objectbox-dart test cited by name in
+  that binding's `COVERAGE.md` (see below), or an explicit `unverified` row.
+  Hedged
   wording ("either fails or is silently ignored") means nobody ran it: run
   it.
 - **Topics graduate, structure stays.** When a section of a binding file grows
@@ -82,8 +83,9 @@ A claim is covered upstream only when all of these hold:
 3. `python3 validation/check_upstream.py` resolves the locator, and `--run`
    passes.
 
-If the upstream test asserts a weaker or different property, say so in the
-row and keep the local test. Claims of absence ("no `reset()`") are proven by
+If no upstream test asserts the claim, write one there: this repo holds no
+tests of its own. Until it is in a tagged release, the row says `pending
+upstream` with the test name and branch. Claims of absence ("no `reset()`") are proven by
 the snippet analyzer, never by an upstream test.
 
 When bumping the pin: run `check_upstream.py --diff <old-tag> <new-tag>`,

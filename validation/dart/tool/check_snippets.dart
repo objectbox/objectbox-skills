@@ -12,9 +12,7 @@ import 'dart:io';
 const skillPath = '../../skills/objectbox/references/dart-flutter.md';
 const outDir = 'test/snippets';
 
-const entityNames = {
-  'Conversation', 'Message', 'Chunk', 'ChunkDefault', 'DateEntity', 'User', 'Role',
-};
+const entityNames = {'Conversation', 'Message', 'Chunk'};
 const contextNames = {
   'store', 'box', 'conversationBox', 'messageBox', 'chunkBox', 'conversation',
   'message', 'userId', 'conversationId', 'id', 'queryVector', 'maxCount',
