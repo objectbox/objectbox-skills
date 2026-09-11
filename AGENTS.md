@@ -104,3 +104,5 @@ read every cited test whose body changed, and only then re-mark its row.
   `validation/dart/COVERAGE.md`.
 - `python3 validation/check_upstream.py` resolves every upstream locator at
   the pinned tag (clones objectbox-dart into `validation/.cache/` once).
+- `.gitlab-ci.yml` runs the same checks on every push; the scheduled
+  `upstream-main` job is advisory and may fail without blocking.

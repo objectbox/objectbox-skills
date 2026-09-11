@@ -1,0 +1,63 @@
+# Validates the skill's claims: every code snippet in the skill file compiles
+# against the pinned ObjectBox version, the coverage table matches the skill
+# file, links and anchors resolve, and the objectbox-dart tests cited in the
+# coverage table pass at the pinned tag. See validation/README.md.
+stages:
+  - test
+
+variables:
+  # Same Dart SDK as objectbox-dart's pipeline (https://hub.docker.com/_/dart/tags).
+  DART_VERSION: '3.12.1'
+  # Where check_upstream.py clones objectbox-dart from; set to a mirror if needed.
+  OBJECTBOX_DART_REPO: 'https://github.com/objectbox/objectbox-dart.git'
+
+.common:
+  image: dart:$DART_VERSION # Official Dart Docker image
+  tags: [ x64, linux, docker ] # Shell scripts, so Linux only
+  before_script:
+    # Make PUB_CACHE cacheable in GitLab, like objectbox-dart does.
+    - export PUB_CACHE="$CI_PROJECT_DIR/.pub-cache"
+    - export PATH="$PATH":"$PUB_CACHE/bin"
+    # The Dart image is Debian slim: the checkers are Python, install.sh needs curl.
+    - apt-get update && apt-get install --yes --no-install-recommends python3 git curl ca-certificates
+  cache:
+    paths:
+      - $CI_PROJECT_DIR/.pub-cache/bin/
+      - $CI_PROJECT_DIR/.pub-cache/global_packages/
+      - $CI_PROJECT_DIR/.pub-cache/hosted/
+    key: "linux-x64-dart-$DART_VERSION-pub-cache"
+
+# Fast checks: plugin manifests parse, the validation package is formatted and
+# analyzes clean, every skill snippet compiles, coverage rows match the skill
+# file, links and anchors resolve, and every upstream locator exists at the tag.
+validate:
+  extends: .common
+  stage: test
+  script:
+    - python3 -m json.tool .claude-plugin/plugin.json > /dev/null
+    - python3 -m json.tool .claude-plugin/marketplace.json > /dev/null
+    - cd validation/dart
+    - dart pub get
+    - dart format --output=none --set-exit-if-changed lib tool
+    - ./run.sh --static
+    - dart analyze lib tool
+
+# Runs the objectbox-dart tests cited in COVERAGE.md, at the pinned tag, from a
+# checkout the script prepares (pub get, code generation, native library).
+upstream-tests:
+  extends: .common
+  stage: test
+  script:
+    - python3 validation/check_upstream.py --prepare --run
+
+# Scheduled canary: the same tests against objectbox-dart main. Advisory only;
+# a failure means a cited behavior may change in the next release, so read the
+# test body before bumping the pin (see AGENTS.md).
+upstream-main:
+  extends: .common
+  stage: test
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - python3 validation/check_upstream.py --ref origin/main --prepare --run

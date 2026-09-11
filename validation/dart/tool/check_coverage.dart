@@ -22,8 +22,10 @@ Set<String> firstCells(String text, String header) {
 }
 
 void main() {
-  final skill = firstCells(File(skillPath).readAsStringSync(), '| Mistake | Why');
-  final cov = firstCells(File(coveragePath).readAsStringSync(), '| Mistake | Type');
+  final skill =
+      firstCells(File(skillPath).readAsStringSync(), '| Mistake | Why');
+  final cov =
+      firstCells(File(coveragePath).readAsStringSync(), '| Mistake | Type');
   final missing = skill.difference(cov), stale = cov.difference(skill);
   for (final m in missing) {
     stderr.writeln('no coverage row for: $m');

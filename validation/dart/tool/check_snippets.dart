@@ -14,9 +14,20 @@ const outDir = 'test/snippets';
 
 const entityNames = {'Conversation', 'Message', 'Chunk'};
 const contextNames = {
-  'store', 'box', 'conversationBox', 'messageBox', 'chunkBox', 'conversation',
-  'message', 'userId', 'conversationId', 'id', 'queryVector', 'maxCount',
-  'TestStoreHandle', 'openTestStore',
+  'store',
+  'box',
+  'conversationBox',
+  'messageBox',
+  'chunkBox',
+  'conversation',
+  'message',
+  'userId',
+  'conversationId',
+  'id',
+  'queryVector',
+  'maxCount',
+  'TestStoreHandle',
+  'openTestStore',
 };
 
 /// Blocks matching any of these are skipped (with a reason).
@@ -80,9 +91,11 @@ $body''';
     final name = 'snippet_${total.toString().padLeft(2, '0')}_line$line.dart';
     File('$outDir/$name').writeAsStringSync(out);
   }
-  stdout.writeln('extracted ${total - skipped} of $total dart blocks to $outDir');
+  stdout
+      .writeln('extracted ${total - skipped} of $total dart blocks to $outDir');
 
-  final result = Process.runSync('dart', ['analyze', '--format=machine', outDir]);
+  final result =
+      Process.runSync('dart', ['analyze', '--format=machine', outDir]);
   final rows = (result.stdout as String)
       .split('\n')
       .where((l) => l.contains('|'))

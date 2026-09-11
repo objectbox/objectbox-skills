@@ -4,8 +4,6 @@ library;
 
 import 'dart:io';
 
-import 'package:objectbox/objectbox.dart';
-
 import 'entities.dart';
 import 'objectbox.g.dart';
 
@@ -37,5 +35,7 @@ class TestStoreHandle {
 
 Future<TestStoreHandle> openTestStore() async {
   final dir = Directory.systemTemp.createTempSync('obx_test_');
+  // The skill's snippet targets Flutter, where openStore() returns a Future.
+  // ignore: await_only_futures
   return TestStoreHandle._(await openStore(directory: dir.path), dir);
 }

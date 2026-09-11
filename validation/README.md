@@ -15,6 +15,10 @@ oracle. Reading the docs settles only the first.
 | Idiom | `watch(triggerImmediately: true)` | official examples | the raw-file links in the skill file |
 | Architecture opinion | never poll | a human | marked `opinion` in `COVERAGE.md` |
 
+`.gitlab-ci.yml` runs all of this: `validate` (static checks), `upstream-tests`
+(the cited objectbox-dart tests at the pinned tag) and, on a schedule,
+`upstream-main` as an advisory canary against objectbox-dart `main`.
+
 `check_links.py` verifies every relative link and heading anchor under
 `skills/`; `dart/run.sh` runs it too. `check_upstream.py` resolves the
 upstream test locators in `dart/COVERAGE.md` against objectbox-dart at the
