@@ -181,8 +181,6 @@ class ManualDocument {
 Entities without `@Sync()` are local-only.
 
 - Do not create relations across the sync/local boundary.
-- A plain ID reference from a local entity to a synced one is only safe if the
-  synced entity uses `sharedGlobalIds: true`.
 - **You cannot flip an existing entity to `@Sync()` in place.** Options: while
   still in development, add the annotation and wipe the databases; or assign
   the entity a new UID (keeping the name), which drops that type's existing
@@ -342,9 +340,6 @@ Rules:
 
 ## Testing
 
-**Never open a real SyncClient in tests.** It is nondeterministic — connection
-races, port collisions — and hostile to CI.
-
 ### Case A — the test does not touch `@Sync()` entities
 
 Open a plain store in a temp directory and delete it in teardown:
@@ -373,7 +368,9 @@ setUp(()    async => handle = await openTestStore());
 tearDown(() async => handle.dispose());
 ```
 
-### Case B — the test writes to `@Sync()` entities
+### Case B — the test writes to `@Sync()` entities, no server needed
+
+A real `SyncClient` in tests is fine.
 
 Case A is not enough: writes to `@Sync()` types fail until a SyncClient has been
 *started* ([Native library](#native-library--sync-vs-non-sync)). Install the
@@ -397,7 +394,30 @@ Constructing the client without `start()` does not activate writes, and
 cannot pass — skip them on `!Sync.isAvailable()`. There is no `SyncConfig`
 class in the package; do not invent one.
 
-### Both cases
+### Case C — the test syncs against a real server
+
+Each pitfall with the fix ObjectBox's own tests use:
+
+- **Fixed ports collide** when suites run in parallel. Bind a free loopback
+  port first (`ServerSocket.bind(InternetAddress.loopbackIPv4, 0)`, read the
+  port, close the socket) and start the server with
+  `--bind=ws://127.0.0.1:$port`.
+- **Server data survives between runs.** Give the server its own
+  `--db-directory` per test and delete it before start and after stop.
+- **The server must know the current model.** Start it with
+  `--model=<test project>/objectbox-model.json`; a stale model rejects the
+  client ([Model file](#model-file)).
+- **Sync is asynchronous.** Do not sleep and assert. Wait for
+  `client.state() == SyncState.loggedIn`, or for `client.loginEvents.first`
+  with a timeout, before the first assertion, and for `completionEvents`
+  before asserting that data arrived. The event streams do not buffer:
+  subscribe before `start()`.
+- **Teardown order:** close the client, stop the server, then close and
+  delete the store. A closed client cannot be restarted — make a new one.
+
+Server setup and authentication: [sync-server-setup.md](sync-server-setup.md).
+
+### All cases
 
 - **Prefer one shared in-process store for the whole suite** — open once in a
   shared helper, reuse it, close it in teardown. No store should outlive its
@@ -436,14 +456,13 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | `ToOne<X>? x;` — nullable or non-final | the relation object always exists; the *target* is what may be null | `final x = ToOne<X>();` |
 | `toMany.reset()` | Java API; Dart's `ToMany` has no `reset()` | re-read the owner from its box |
 | Reading `.target` on a manually built entity | no store attached, cannot resolve | `x.attach(store)` first |
-| Mirror `int` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` or `sharedGlobalIds: true` |
+| Mirror `int` FK on a synced relation | Sync remaps relations, not mirrors | use `ToOne` |
 | Expecting `removeAt()` to delete the target | it only dissolves the relationship | delete the target explicitly |
 | Cascade delete without a transaction | partial deletes leave orphans | `store.runInTransaction(TxMode.write, ...)` |
-| `@Id(assignable: true)` without `sharedGlobalIds: true` | IDs get remapped under Sync | set both |
 | Adding `@Sync()` to an entity with data | unsupported migration | wipe server + clients, or model anew |
 | `Sync.client(...)` | deprecated in 5.2.0+ | `SyncClient(store, [url], [credentials])` |
 | SyncClient created while sync disabled | still attempts a TCP connection | check the flag first |
-| Tests connect to a real Sync Server | nondeterministic, CI-hostile | start a client on an unreachable loopback port ([Testing](#testing)) |
+| Sync test on a fixed port, shared server data, or a sleep before asserting | port collisions, leftovers between runs, timing flakes | free loopback port, per-test `--db-directory`, wait on `state()` or `loginEvents` ([Testing](#testing)) |
 | `--unsecured-no-authentication` beyond loopback | anyone on the network can read/write | shared secret, never committed |
 | Writing `@Sync()` entities without a *started* SyncClient | "sync has not been activated for this store", under both library variants | sync-enabled library plus `SyncClient.start()` |
 | `ulimit -n unlimited` on macOS | libwebsockets crashes | `ulimit -n 4096` |
