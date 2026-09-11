@@ -1,0 +1,188 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:5530698354973079201",
+      "lastPropertyId": "3:5736116691826009938",
+      "name": "Chunk",
+      "properties": [
+        {
+          "id": "1:7205558289659746434",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4883936195081151164",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "3:5736116691826009938",
+          "name": "embedding",
+          "indexId": "1:6692845793590754590",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:135852389101712275",
+      "lastPropertyId": "2:3533074914985508210",
+      "name": "ChunkDefault",
+      "properties": [
+        {
+          "id": "1:6155431326957606051",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3533074914985508210",
+          "name": "embedding",
+          "indexId": "2:2404674900584712439",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:1158298910631471861",
+      "lastPropertyId": "4:2112623206274101220",
+      "name": "Conversation",
+      "flags": 2,
+      "properties": [
+        {
+          "id": "1:2885170687436833533",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7713018057028470003",
+          "name": "userId",
+          "indexId": "3:2441750088498201400",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:979695211377497300",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "4:2112623206274101220",
+          "name": "updatedAt",
+          "type": 10
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:604562200041991189",
+      "lastPropertyId": "6:5270146860035526299",
+      "name": "DateEntity",
+      "properties": [
+        {
+          "id": "1:489360683530184644",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7678903508087356646",
+          "name": "plain",
+          "type": 10
+        },
+        {
+          "id": "3:6815024352866546194",
+          "name": "date",
+          "type": 10
+        },
+        {
+          "id": "4:3630973628798404168",
+          "name": "dateUtc",
+          "type": 10
+        },
+        {
+          "id": "5:2150075985813752170",
+          "name": "dateNano",
+          "type": 12
+        },
+        {
+          "id": "6:5270146860035526299",
+          "name": "dateNanoUtc",
+          "type": 12
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:9140951902676590693",
+      "lastPropertyId": "3:4498803885632225428",
+      "name": "Message",
+      "flags": 2,
+      "properties": [
+        {
+          "id": "1:8213523499509996648",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2573518406918295380",
+          "name": "body",
+          "type": 9
+        },
+        {
+          "id": "3:4498803885632225428",
+          "name": "conversationId",
+          "indexId": "4:6098783241214294805",
+          "type": 11,
+          "flags": 520,
+          "relationTarget": "Conversation"
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "6:8538142039140094901",
+      "lastPropertyId": "3:8598784923998495037",
+      "name": "User",
+      "properties": [
+        {
+          "id": "1:8422870096346059564",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1741470258775722985",
+          "name": "name",
+          "type": 9
+        },
+        {
+          "id": "3:8598784923998495037",
+          "name": "dbRole",
+          "type": 6
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "6:8538142039140094901",
+  "lastIndexId": "4:6098783241214294805",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

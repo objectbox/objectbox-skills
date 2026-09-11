@@ -1,1 +1,9 @@
 .idea/
+
+# validation/dart: generated or downloaded
+validation/dart/.dart_tool/
+validation/dart/build/
+validation/dart/lib/libobjectbox*
+validation/dart/lib/objectbox.g.dart
+validation/dart/test/snippets/
+validation/dart/download/

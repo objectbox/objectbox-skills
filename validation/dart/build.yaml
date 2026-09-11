@@ -1,0 +1,7 @@
+# The extracted skill snippets declare @Entity() classes of their own. They are
+# analyzed only; keep the generator from building a second model out of them.
+targets:
+  $default:
+    sources:
+      exclude:
+        - test/snippets/**
