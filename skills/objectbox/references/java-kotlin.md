@@ -159,7 +159,7 @@ Check if using a unique indexed property is a viable alternative."
 @Sync(sharedGlobalIds = true)
 class ManualDocument(
     @Id(assignable = true) var id: Long = 0,
-    ...
+    var title: String = ""
 )
 ```
 
