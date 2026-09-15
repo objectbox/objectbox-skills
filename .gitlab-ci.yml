@@ -8,8 +8,11 @@ stages:
 variables:
   # Same Dart SDK as objectbox-dart's pipeline (https://hub.docker.com/_/dart/tags).
   DART_VERSION: '3.12.1'
-  # Where check_upstream.py clones objectbox-dart from; set to a mirror if needed.
+  # Where check_upstream.py clones the upstream repositories from; set to a mirror if needed.
   OBJECTBOX_DART_REPO: 'https://github.com/objectbox/objectbox-dart.git'
+  OBJECTBOX_JAVA_REPO: 'https://github.com/objectbox/objectbox-java.git'
+  # objectbox-integration-test is internal and not cloned on CI; its locators are checked locally
+  # with --repo (see validation/README.md).
 
 .common:
   image: dart:$DART_VERSION # Official Dart Docker image
@@ -43,8 +46,27 @@ validate:
     - ./run.sh
     - dart analyze lib tool
 
-# Scheduled drift check: have the cited objectbox-dart tests changed or gone
-# missing between the pinned tag and main? Running them would prove nothing,
+# Same for Java/Kotlin: the snippets compile (Gradle with code generation, nothing runs), the
+# coverage rows match the skill file, links resolve, and every objectbox-java locator exists.
+validate-java:
+  stage: test
+  image: eclipse-temurin:17-jdk
+  tags: [ x64, linux, docker ]
+  variables:
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-home"
+  cache:
+    paths:
+      - .gradle-home/caches/
+      - .gradle-home/wrapper/
+    key: "linux-x64-gradle-home"
+  before_script:
+    - apt-get update && apt-get install --yes --no-install-recommends python3 git ca-certificates
+  script:
+    - python3 -m json.tool .claude-plugin/plugin.json > /dev/null
+    - validation/java/run.sh
+
+# Scheduled drift check: have the cited upstream tests changed or gone
+# missing between the pinned tag and the development branch? Running them would prove nothing,
 # objectbox-dart's CI already does; a changed body means a claim's evidence is
 # moving, so read the test before bumping the pin (see AGENTS.md). Advisory.
 upstream-drift:
@@ -54,4 +76,5 @@ upstream-drift:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
-    - python3 validation/check_upstream.py --diff origin/main
+    - python3 validation/check_upstream.py --binding dart --diff origin/main
+    - python3 validation/check_upstream.py --binding java --diff origin/dev

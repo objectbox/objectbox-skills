@@ -101,11 +101,14 @@ docs instead, so nothing here goes stale against a release.
 
 ## Validation
 
-The skill files are prose, so `validation/` holds what falsifies them. For
-Dart, `validation/dart/run.sh` analyzes every code snippet in
-`dart-flutter.md` against a pinned ObjectBox version and runs one test per
-behavioral claim. Its `COVERAGE.md` maps each row of the skill's
-quick-reference table to the check behind it, or marks it unverified.
+The skill files are prose, so `validation/` holds what falsifies them. Each
+binding has a `COVERAGE.md` that maps every row of the skill's quick-reference
+table to the upstream test behind it (objectbox-dart, objectbox-java or the
+internal objectbox-integration-test), or marks it unverified; `run.sh` checks
+the table against the skill file and resolves every cited test at the pinned
+upstream tag. For Dart, `validation/dart/run.sh` additionally compiles every
+code snippet in `dart-flutter.md` against a pinned ObjectBox version. No tests
+live here: what upstream did not assert is added upstream.
 
 ## Status
 

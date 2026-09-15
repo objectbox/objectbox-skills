@@ -1,0 +1,16 @@
+[versions]
+# The ObjectBox version the skill's snippets are compiled against. check_upstream.py resolves the
+# cited tests at tag V<objectbox> of objectbox-java and objectbox-integration-test.
+objectbox = "6.0.0-beta"
+kotlin = "2.1.20"
+junit = "4.13.2"
+
+[libraries]
+objectbox-java = { module = "io.objectbox:objectbox-java", version.ref = "objectbox" }
+objectbox-kotlin = { module = "io.objectbox:objectbox-kotlin", version.ref = "objectbox" }
+junit = { module = "junit:junit", version.ref = "junit" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+objectbox = { id = "io.objectbox", version.ref = "objectbox" }

@@ -18,8 +18,9 @@ data gets wrong. It is not a mirror of API documentation.
   (`sync-server-setup.md`, `vector-search.md`).
 - `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — the repo
   root is the plugin; skills under `skills/` are auto-discovered.
-- `validation/<binding>/` — executable checks for the claims in the skill
-  files (see `validation/README.md`). Not skill content; agents never load it.
+- `validation/<binding>/` — checks for the claims in the skill files: a
+  `COVERAGE.md` citing upstream tests per claim, plus checkers (see
+  `validation/README.md`). Not skill content; agents never load it.
 
 ## Rules for editing content
 
@@ -70,21 +71,26 @@ data gets wrong. It is not a mirror of API documentation.
 - **Frontmatter:** keep `name: objectbox` stable. The `description` is the
   trigger — third person, states when to use the skill, names the bindings.
 
-## Verifying a claim against objectbox-dart
+## Verifying a claim against the upstream tests
 
 A claim is covered upstream only when all of these hold:
 
 1. A test at the pinned tag asserts the claim's specific behavior. Cite it in
-   `validation/dart/COVERAGE.md` as `objectbox_test/test/<file>::<exact test
-   name>`.
+   `validation/<binding>/COVERAGE.md`: Dart as `objectbox_test/test/<file>::<exact
+   test name>` (objectbox-dart), Java/Kotlin as `<repo>:<path>::<method>` with
+   `<repo>` being `objectbox-java` or `objectbox-integration-test`.
 2. You have read the test body and can quote the `expect(...)` lines that
    prove the claim. A grep hit, a comment, or a test that merely calls the
    API is a candidate, not evidence. Never cite from memory.
-3. `python3 validation/check_upstream.py` resolves the locator at the pinned
-   tag. Running the test is not needed: objectbox-dart's CI did, at that tag.
+3. `python3 validation/check_upstream.py --binding <binding>` resolves the
+   locator at the pinned tag. Running the test is not needed: the upstream CI
+   did, at that tag.
 
 If no upstream test asserts the claim, write one there: this repo holds no
-tests of its own. Until it is in a tagged release, the row says `pending
+tests of its own. For Java/Kotlin, tests that need the Gradle plugin, the
+annotation processor or a Sync Server belong in objectbox-integration-test,
+everything else in objectbox-java (its `AGENTS.md` says the same).
+Until it is in a tagged release, the row says `pending
 upstream` with the test name and branch. Claims of absence ("no `reset()`") are proven by
 the snippet analyzer, never by an upstream test.
 
@@ -100,10 +106,11 @@ row. The scheduled CI job does the same against `main` as an early warning.
 - SKILL.md stays well under 500 lines; deep material goes to `references/`.
 - Any new or changed API claim was checked against the official docs, not
   recalled.
-- `validation/dart/run.sh` passes after touching `dart-flutter.md`, and every
-  row of its "Quick reference" table has a row in
-  `validation/dart/COVERAGE.md`.
-- `python3 validation/check_upstream.py` resolves every upstream locator at
-  the pinned tag (clones objectbox-dart into `validation/.cache/` once).
+- `validation/dart/run.sh` passes after touching `dart-flutter.md`, and
+  `validation/java/run.sh` after touching `java-kotlin.md`; every row of a
+  "Quick reference" table has a row in that binding's `COVERAGE.md`.
+- `python3 validation/check_upstream.py --binding <binding>` resolves every
+  upstream locator at the pinned tag (clones the upstream repositories into
+  `validation/.cache/` once).
 - `.gitlab-ci.yml` runs the same checks on every push; the scheduled
   `upstream-drift` job is advisory and may fail without blocking.

@@ -1,27 +1,41 @@
 # Coverage — java-kotlin.md
 
-One row per row of the "Quick reference — common mistakes" table in
-`skills/objectbox/references/java-kotlin.md`, verbatim in the first column
-(`../check_coverage.py` fails when the two drift). Verified against objectbox-java
-**V6.0.0-beta** (library 6.0.0-beta, JVM native library 6.0.0-beta / 6.0.0-sync-beta) and
-objectbox-integration-test **V6.0.0-beta** (`versionUnderTest = "6.0.0-beta"`) on Linux x64,
-2026-09-14. The tags are in `pins.json`.
+This file records the evidence behind `skills/objectbox/references/java-kotlin.md`, the
+Java/Kotlin reference of the ObjectBox skill.
+The skill tells AI coding agents how ObjectBox behaves in Java and Kotlin; every such statement is
+traced here to an upstream test, a docs page or the library source, or it is marked as unverified.
+This repository holds no tests of its own: the evidence lives in the ObjectBox test suites, and
+what they did not assert was added there.
 
-The Upstream column cites tests as `<repo>:<path>::<method>`, where `<repo>` is `objectbox-java`
-(`tests/objectbox-java-test`, plain JUnit against the sync-enabled JVM library, no Gradle plugin)
-or `objectbox-integration-test` (`test-java`, `test-kotlin`, `test-java-sync-server`: full Gradle
-projects with plugin, annotation processor and, for the last one, an embedded Sync Server).
-`../check_upstream.py --binding java` resolves every such locator at the pinned tags and diffs them
-on pin bumps. A locator is only written after reading the test body; a grep hit is a candidate,
-not evidence. Tests written for this table but not yet in a tagged release are listed as
-`pending upstream` with file and method, without the `<repo>:` prefix, so the checker skips them.
+The main table has one row per row of the skill file's "Quick reference — common mistakes" table,
+with the first column copied verbatim; `../check_coverage.py` fails when the two tables drift apart.
+The claims were verified against objectbox-java at tag **V6.0.0-beta** (library 6.0.0-beta, JVM
+native library 6.0.0-beta / 6.0.0-sync-beta) and objectbox-integration-test at tag **V6.0.0-beta**
+(`versionUnderTest = "6.0.0-beta"`), on Linux x64, on 2026-09-14.
+The tag is derived as `V<objectbox>` from `gradle/libs.versions.toml`, which also pins the snippet
+build.
 
-Status values: `verified <tag>` (an upstream test, the library source at the tag, or the CHANGELOG
-proves it), `partial` (the recipe is proven, the failure mode is not), `unverified` (nobody has run
-it — treat the skill text as a hypothesis), `pending upstream` (asserted by a test that is written
-and was run locally, but is not in a tagged release yet; becomes a locator once the pin contains
-it), `manual` (evidence is a docs page, the library source or an issue, linked in the check
-column), `opinion` (an architecture rule, not falsifiable), `n/a` (not an ObjectBox claim).
+The Upstream column cites tests as `<repo>:<path>::<method>`.
+`<repo>` is either `objectbox-java` (`tests/objectbox-java-test`: plain JUnit against the
+sync-enabled JVM library, without the Gradle plugin) or `objectbox-integration-test` (`test-java`,
+`test-kotlin`, `test-java-sync-server`: full Gradle projects with plugin and annotation processor,
+the last one with an embedded Sync Server).
+`../check_upstream.py --binding java` resolves every such locator at the pinned tag and shows which
+cited tests changed on a pin bump.
+A locator is only written after reading the test body; a grep hit is a candidate, not evidence.
+Tests written for this table that are not in a tagged release yet are listed as `pending upstream`
+with file and method but without the `<repo>:` prefix, so the checker skips them.
+
+Status values:
+
+- `verified <tag>`: an upstream test, the library source at the tag, or the CHANGELOG proves it.
+- `partial`: the recipe is proven, the failure mode is not.
+- `unverified`: nobody has run it; treat the skill text as a hypothesis.
+- `pending upstream`: asserted by a test that is written and was run locally, but is not in a
+  tagged release yet; it becomes a locator once the pin contains it.
+- `manual`: the evidence is a docs page, the library source or an issue, named in the row.
+- `opinion`: an architecture rule, not falsifiable.
+- `n/a`: not an ObjectBox claim.
 
 | Mistake | Type | Other evidence | Upstream | Status |
 |---|---|---|---|---|
@@ -82,12 +96,17 @@ column), `opinion` (an architecture rule, not falsifiable), `n/a` (not an Object
   `RelationTest`) and objectbox-integration-test (`test-kotlin`: `KotlinJvmRelationInitTest`,
   `DataClassRelationTest` with fixtures `LateinitOrder.kt` and `DataClassRelations.kt`;
   `test-java-sync-server`: `idMapping_plainLongProperty_isNotMapped` with a `relIdMirror` property
-  on `AllTypesEntity`). All passed locally on 2026-09-14. Once released, bump `pins.json`, run
+  on `AllTypesEntity`). All passed locally on 2026-09-14. Once released, bump `objectbox` in `gradle/libs.versions.toml`, run
   `check_upstream.py --binding java --diff`, and turn the notes into locators.
 - `RelationTest.java::setAndPutTarget_newSource_newTarget` (objectbox-java, uncommitted) fails:
-  `setAndPutTarget(newTarget)` puts the target and the source, but the source's target ID stays 0
-  because `ToOne.setAndPutTargetAlways()` never calls `setTargetId()` for a new target. Suspected
-  library bug, to be confirmed by the objectbox-java maintainers before the skill mentions it.
+  `setAndPutTarget(newTarget)` puts the target (ID 1) and the source, but the source's stored
+  target ID is 0 and the `ToOne` is left inconsistent (`getTargetId()` 0, `isResolved()` false,
+  cached target set, `getTarget()` throws "Illegal ID value: 0"), because
+  `ToOne.setAndPutTargetAlways()` calls `setResolvedTarget()` but never `setTargetId()` for a new
+  target. `setTarget(new)` followed by `box.put(source)`, or by `setAndPutTarget(new)`, and
+  `setAndPutTarget(existing)` all store the relation. Suspected library bug (the code dates from
+  2017 and no upstream test calls `setAndPutTarget`), to be confirmed by the objectbox-java
+  maintainers before the skill mentions it.
 - A `@Sync` entity under the non-sync library: no upstream project has one (`test-java` asserts
   only that no client can be built). Proposed: a `@Sync` entity in `test-java` plus a
   `SyncNotAvailableTest` case asserting that `put` throws "sync has not been activated".
@@ -98,5 +117,5 @@ column), `opinion` (an architecture rule, not falsifiable), `n/a` (not an Object
   embedded server and `TestServerEnv` for it.
 - The property-level `@Sync` claim is a compile error; there is no negative kapt/javac fixture in
   either repository.
-- No Kotlin snippet compiler: the skill's code blocks are checked by eye against the fixtures and
-  API sources cited above, not compiled.
+- The snippet build compiles the skill's Kotlin blocks (with code generation) but runs nothing; a
+  block that compiles and misbehaves is still caught only by the upstream tests above.

@@ -20,14 +20,17 @@ oracle. Reading the docs settles only the first.
 `main`.
 
 `check_links.py` verifies every relative link and heading anchor under
-`skills/`; `dart/run.sh` runs it too. `check_upstream.py` resolves the
-upstream test locators in `dart/COVERAGE.md` against objectbox-dart at the
-pinned tag; `--diff [OLD] NEW` shows cited tests that changed between two
-refs. It never runs them: objectbox-dart's CI already did, at that tag.
+`skills/`; every `run.sh` runs it too. `check_upstream.py --binding <b>`
+resolves the upstream test locators in `<b>/COVERAGE.md` against the upstream
+repositories at the pinned tags; `--diff [OLD] NEW` shows cited tests that
+changed between two refs. It never runs them: the upstream CI already did, at
+that tag. `check_coverage.py` fails when the skill file's "Quick reference"
+table and `COVERAGE.md` disagree on their first column.
 
-Per binding: `validation/<binding>/` with a `run.sh`, a `COVERAGE.md` that has
-one row per row of the skill file's "Quick reference" table, and the tests.
-Only `dart/` exists so far.
+Per binding: `validation/<binding>/` with a `run.sh` and a `COVERAGE.md` that
+has one row per row of the skill file's "Quick reference" table. `dart/` also
+has a package that compiles the skill's snippets; `java/` has no build at all,
+see below.
 
 ## Dart
 
@@ -53,3 +56,41 @@ Layout:
 
 There are no tests in this repository: behavior is asserted by
 objectbox-dart's own suite, and what it did not assert was added there.
+
+## Java / Kotlin
+
+```bash
+validation/java/run.sh
+```
+
+`run.sh` checks the coverage table and the links, extracts every ` ```kotlin `
+block of the skill file into a small Gradle project and compiles it against
+the pinned ObjectBox version (annotation processor included, nothing is run),
+then resolves every upstream locator at tag `V<version>`. The version is the
+single `objectbox` entry in `java/gradle/libs.versions.toml`.
+
+The Gradle project is compile-only, on purpose: the upstream suites already
+have the store, entity and Sync Server setup, so every behavior claim is cited
+from [objectbox-java](https://github.com/objectbox/objectbox-java)
+(`tests/objectbox-java-test`) or from the internal objectbox-integration-test
+repository (`test-java`, `test-kotlin`, `test-java-sync-server`), and what
+they did not assert was added there. Locators have the form
+`<repo>:<path>::<method>`, where `<repo>` is `objectbox-java` or
+`objectbox-integration-test`. objectbox-java is cloned from GitHub;
+objectbox-integration-test is internal, so its locators are skipped unless
+`OBJECTBOX_INTEGRATION_TEST_REPO` or `--repo objectbox-integration-test=<path>`
+names it, e.g. locally:
+
+```bash
+validation/java/run.sh --repo objectbox-integration-test=../objectbox-integration-test
+```
+
+Layout:
+
+- `gradle/libs.versions.toml` — the pinned ObjectBox, Kotlin and JUnit versions.
+- `src/main/kotlin/io/objectbox/skill/context/SnippetContext.kt` — free
+  variables the snippets use without declaring (`store`, `conversationBox`, ...)
+  and the one entity no snippet declares. Compiled, never run.
+- `tool/extract_snippets.py` — the snippet extractor; writes the generated
+  files to `src/main/kotlin/io/objectbox/skill/snippets/` (git-ignored, like
+  the processor's `objectbox-models/`).
