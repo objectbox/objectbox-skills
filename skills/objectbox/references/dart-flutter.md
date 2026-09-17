@@ -35,6 +35,24 @@ your starting shapes.
 3. **Look up the API, don't recall it.** Any docs page can be fetched as Markdown
    by appending `.md` — e.g. `https://docs.objectbox.io/queries.md`.
    Generated API reference: https://pub.dev/documentation/objectbox/latest/
+4. **The store comes from the generated code, boxes from the store** — see
+   [Store and boxes](#store-and-boxes). There is no `store.query()`, `store.put()` or
+   `store.runInTx()`; those are guesses or Java names.
+5. **`flutter test`, `dart test` and `dart run` load the native library from `lib/`**, which
+   `objectbox_flutter_libs` does not provide — see [Native library](#native-library) before
+   the first test run.
+
+## Store and boxes
+
+```dart
+final store = await openStore(directory: dbDir);   // generated; Future<Store> in Flutter, Store in pure Dart
+final conversationBox = store.box<Conversation>();
+```
+
+`openStore()` in `lib/objectbox.g.dart` returns a `Future<Store>` in a Flutter project (it
+resolves the app's documents directory) and a plain `Store` in a pure Dart package. Every
+read and write goes through a `Box<T>`; transactions through
+`store.runInTransaction(TxMode.write, ...)` ([Cascade deletes](#cascade-deletes-are-manual)).
 
 ## Entity declaration
 
@@ -97,6 +115,37 @@ Rules:
   its box to refresh it. Dart's `ToMany` has no `reset()`; that is the Java
   API.
 
+A many-to-many is a `ToMany` on the owning side and a `@Backlink()` `ToMany` on the other:
+
+```dart
+@Entity()
+class Conversation {
+  @Id() int id = 0;
+  String title = '';
+
+  final tags = ToMany<Tag>();                          // owning side: add, remove, put the owner
+}
+
+@Entity()
+class Tag {
+  @Id() int id = 0;
+  @Unique() String name = '';
+
+  @Backlink()                                          // reverse side of the to-many
+  final conversations = ToMany<Conversation>();
+}
+```
+
+- **A hand-written join entity with two plain `int` id fields is not a relation.** No link
+  query can follow it, Sync does not remap the ids, and every "all of / any of" question
+  becomes a loop over rows in Dart. Evaluated agents built one repeatedly, always "to keep
+  the queries simple", and then loaded whole boxes for every set question.
+  A link entity is for links that carry data (position, quantity) — and then it holds two
+  real `ToOne`s, not two ints.
+- **A `ToMany` reads back in target-id order, not insertion order**, in both directions.
+  Where order matters (steps, playlist items), persist a position field; evaluated agents
+  discovered this late and sorted as a workaround.
+
 Reading, writing and adding follow the docs
 (https://docs.objectbox.io/relations.md). The silent one:
 
@@ -118,6 +167,45 @@ message.conversation.attach(store);
 - If you construct an entity manually and hand it to callers who may read
   `.target`, attach first.
 - `hasValue` tells you whether a target is set without triggering a read.
+
+## Link queries
+
+"Conversations tagged X" is a link query over the relation, never a walk over rows:
+
+```dart
+// Conversations that carry any of the tags: one link query, one condition.
+final builder = conversationBox.query();
+builder.linkMany(Conversation_.tags, Tag_.name.oneOf(tagNames));
+final query = builder.build();
+try {
+  return query.find();
+} finally {
+  query.close();
+}
+```
+
+- `link()` and `linkMany()` return the builder of the *target* side, for nesting further
+  links; `build()` lives on the source builder. `conversationBox.query().linkMany(...).build()`
+  does not compile ("`build` isn't defined for the type `_QueryBuilder`"). Keep the source
+  builder in a variable, as above, or use a cascade:
+  `(conversationBox.query()..linkMany(Conversation_.tags, condition)).build()`.
+- Every `link()`/`linkMany()` on one builder is another AND. "All of these tags" is one
+  `linkMany` per tag, each with `equals`; there is no all-of condition on a single link. For a
+  set that changes per call, prefer one query per value and intersect the `findIds()` results.
+- A source object appears once in the result even when several of its targets match.
+- `backlink()` and `backlinkMany()` query from the other side — tags by a condition on
+  their conversations — without declaring a `@Backlink` field.
+- Link conditions take parameters like any other condition, so the hot path keeps one built
+  query:
+
+```dart
+// Hot path: one built link query, re-run with a parameter.
+final byTag = (conversationBox.query()
+      ..linkMany(Conversation_.tags, Tag_.name.equals('')))
+    .build();
+byTag.param(Tag_.name).value = 'urgent';
+final urgent = byTag.find();
+```
 
 ## Do not mirror a relation as a plain `int`
 
@@ -152,6 +240,9 @@ bool deleteConversation(int conversationId) {
 - Wrap the cascade in `store.runInTransaction(TxMode.write, ...)`.
 - Remove via the query — do not load-to-delete.
 - Include **every** referencing entity type.
+- The same holds for an import's removal pass: rows missing from the source *and* the shared
+  targets they orphan (tags, ingredients, categories) go in one transaction. Two passes, or
+  one `remove()` per row outside a transaction, leave orphans when the process dies in between.
 - `TxMode` has exactly two values: `TxMode.read` and `TxMode.write`.
 
 ## Avoid assignable IDs with Sync
@@ -243,16 +334,30 @@ distanceType: ...)` on a `@Property(type: PropertyType.floatVector)
 List<double>?` field. The default distance is squared Euclidean — set
 `VectorDistanceType.cosine` explicitly for sentence embeddings.
 
-Query with the **Dart-specific** method name — it is *not* `nearestNeighbors`:
+Query with the **Dart-specific** method name — it is *not* `nearestNeighbors` — and
+keep the query: the vector is a parameter, so the hot path builds it once.
 
 ```dart
-final query = chunkBox
+// Built once by its owner (repository, service); closed when the owner closes.
+final similar = chunkBox
     .query(Chunk_.embedding.nearestNeighborsF32(queryVector, maxCount))
     .build();
-final results = query.findWithScores();
-query.close();
+
+// Per lookup: swap the vector and the count on the same query.
+similar.param(Chunk_.embedding).nearestNeighborsF32(queryVector, maxCount);
+final results = similar.findWithScores();
 // score is a DISTANCE — lower is better
 ```
+
+- "Vector conditions cannot be parameterised" is a wrong conclusion that evaluated agents,
+  the strongest model included, reached on their own before rebuilding (and sometimes never
+  closing) the query per lookup. `param(...).nearestNeighborsF32(vector, count)` is the setter.
+- Combine the vector condition with filters through `&` / `.and()` and over-fetch
+  ([vector-search.md](vector-search.md)); `findWithScores()` and `findIdsWithScores()` are
+  the only distance-ordered finds.
+- An object whose vector is `null` is not in the index. A lookup that starts from such an
+  object must return something the caller can tell from "no neighbors" — a typed result or
+  an error, never a bare empty list ([rule 9](../SKILL.md#9-failure-handling)).
 
 Index design, filter over-fetching, stale detection, and how vectors interact
 with Sync: [vector-search.md](vector-search.md).
@@ -279,17 +384,69 @@ For a hot path build once and change parameters with `param(...).value`
 instead of rebuilding. A query emitted by `watch()` is long-lived by
 construction ([Reactive streams](#reactive-streams--never-poll)).
 
-## Native library — sync vs. non-sync
+- `box.query(condition).find()` does not compile: `query()` returns a `QueryBuilder`, and
+  nothing runs before `build()`. `box.find()` does not exist either; `getAll()` does, and it
+  is the read pattern to avoid ([rule 4](../SKILL.md#4-queries)).
+- An inline `box.query(c).build().find()` that nobody closes holds its native handle until
+  the garbage collector runs the finalizer. Close it in `finally`, or keep it long-lived.
+- `param()` exists for `String`, `int`, `double`, `bool` and byte-vector conditions, for
+  conditions on linked entities ([Link queries](#link-queries)) and for the nearest-neighbor
+  condition ([Vector search](#vector-search-hnsw)). A `List<String>` condition such as
+  `containsElement()` has no parameter type: rebuild that query, or model the values as a
+  relation and link-query it.
+- **Ids first.** `findIds()` and `count()` build no objects; use them for set arithmetic —
+  which stored rows an import must update or remove, which candidates survive a filter — and
+  hydrate the survivors with `getMany()`, which returns `List<T?>`. Loading a whole box to
+  diff it in Dart, vectors included, is the pattern behind most "loads everything and
+  filters in memory" findings in our evaluation, importers and screens alike.
+
+```dart
+final query = conversationBox.query(Conversation_.userId.equals(userId)).build();
+try {
+  final stored = query.findIds().toSet();              // no objects built
+  final gone = stored.difference(idsInFile);           // set arithmetic on ids
+  conversationBox.removeMany(gone.toList());           // by id; hydrate only what you show
+} finally {
+  query.close();
+}
+```
+
+## Native library
+
+`objectbox_flutter_libs` bundles the native library into the *built* Flutter app, and
+nothing else. `flutter test`, `dart test` and `dart run` load it from the working
+directory: `lib/libobjectbox.so` (`.dylib`, `.dll`) is tried first, then `/usr/local/lib`
+on macOS, then the system search path. `flutter test` runs from the project root, so the
+file belongs in the project's `lib/`.
+
+Download it for the **version in `pubspec.lock`**. The install script on `main` (the one
+the docs' one-liner fetches) downloads the library of the *next* binding release, at times
+a prerelease; the bindings are generated per version, and a mismatch is not reported —
+the script's own comment warns of "obscure memory bugs". Take the script from the tag:
+
+```bash
+# objectbox 5.3.2 in pubspec.lock -> tag v5.3.2; --quiet skips the "install to /usr/local/lib?" prompt
+bash <(curl -fsSL https://raw.githubusercontent.com/objectbox/objectbox-dart/v5.3.2/install.sh) --quiet
+```
+
+- It leaves `lib/libobjectbox.*` and a `download/` directory behind. Git-ignore both
+  (`lib/libobjectbox*`, `download/`); they are dev-time artifacts. Evaluated agents
+  committed the library again and again, once with the whole tarball.
+- `ObjectBox platform-specific database library not compatible: is 5.0.0 (...), expected
+  5.3.2 (...) or newer` means an older copy on the system path was loaded because `lib/`
+  has none. The `lib/` copy wins once it is there; do not chase the system copy.
+- `Failed to load ObjectBox library` means no copy was found at all — same fix.
+- Keep `objectbox_flutter_libs` in `pubspec.yaml` even though tests use `lib/`: dropping
+  it "to avoid a second copy" leaves the built app without a library.
+
+### Sync vs. non-sync
 
 The **sync-enabled** native library is a different artifact, not a flag.
 
 - **Flutter app:** use `objectbox_sync_flutter_libs`, which bundles the
   sync-enabled library inside the built app.
-- **CLI tools, servers, tests:** install the library into the process's
-  working directory — `install.sh --sync` from the objectbox-dart repo puts it
-  in `lib/`, which the binding checks before the system library paths.
-- **Never commit `libobjectbox.dylib` / `.so` / `.dll` to git.** Add
-  `lib/libobjectbox*` to `.gitignore`. It is a dev-time install.
+- **CLI tools, servers, tests:** the same download with `--sync`
+  (`install.sh --quiet --sync`) puts the sync-enabled library in `lib/`.
 
 ### The `@Sync()` write constraint
 
@@ -328,7 +485,7 @@ Rules:
 - **Do not start a SyncClient in app code when sync is disabled.** Check the
   enabled flag *before* constructing the client, and remember that `@Sync()`
   types are then read-only
-  ([Native library](#native-library--sync-vs-non-sync)). A bogus URL plus
+  ([Native library](#native-library)). A bogus URL plus
   `start()` is not a disabled mode — it is a live client that tries to connect.
   That trick is for tests only ([Testing](#testing)).
 - Sync sends and receives automatically once started. Do not add a fetch loop.
@@ -373,7 +530,7 @@ tearDown(() async => handle.dispose());
 A real `SyncClient` in tests is fine.
 
 Case A is not enough: writes to `@Sync()` types fail until a SyncClient has been
-*started* ([Native library](#native-library--sync-vs-non-sync)). Install the
+*started* ([Native library](#native-library)). Install the
 sync-enabled library for the test process and start a client against a loopback
 port nothing listens on. It activates the write path, stays
 `SyncState.disconnected`, and never replicates:
@@ -425,6 +582,9 @@ Server setup and authentication: [sync-server-setup.md](sync-server-setup.md).
 - Never share a store between test *groups* that assume a clean database.
 - A green run of each test file *in isolation* does not prove the suite is safe.
   Run the full `flutter test` and confirm a clean, zero-exit teardown.
+- The test process loads `lib/libobjectbox.*` ([Native library](#native-library)). A suite
+  that fails to load the library or reports "not compatible" has a setup problem, not a
+  test problem.
 
 ## macOS: the `ulimit` crash
 
@@ -467,10 +627,23 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | Writing `@Sync()` entities without a *started* SyncClient | "sync has not been activated for this store", under both library variants | sync-enabled library plus `SyncClient.start()` |
 | `ulimit -n unlimited` on macOS | libwebsockets crashes | `ulimit -n 4096` |
 | Committing `libobjectbox.dylib` | dev-time artifact in git | `.gitignore` it |
+| `flutter test` without `lib/libobjectbox.*`, or with an old system copy | "Failed to load ObjectBox library", or "not compatible: is 5.0.0, expected 5.3.2" | download at the package's tag into `lib/` ([Native library](#native-library)) |
+| `install.sh` from `main` | downloads the library of the next release, not the one in `pubspec.lock` | fetch the script from the tag, e.g. `v5.3.2` |
+| Committing the `download/` directory | the download script's leftover tarball in git | `.gitignore` `download/` |
+| Dropping `objectbox_flutter_libs` because tests use `lib/` | the built app has no library at all | keep both |
 | Skipping `build_runner` after entity change | stale `objectbox.g.dart`; analyze/test fail | `dart run build_runner build` |
 | `nearestNeighbors(...)` | that is the Java/Kotlin name | `nearestNeighborsF32(...)` |
 | Treating score as similarity | score is a distance | invert before ranking |
 | Rebuilding the same query on every call in a hot path | build cost on every call | build once, `param(...).value` before each run |
+| Rebuilding the nearest-neighbor query per lookup because "vectors take no parameter" | they do; build cost and an unclosed query per call | `query.param(E_.vector).nearestNeighborsF32(v, n)` |
+| `param()` on a `List<String>` condition | string-vector conditions have no parameter type | rebuild, or model the values as a relation |
+| `store.query(...)`, `store.put(...)`, `store.runInTx(...)`, `box.find(...)` | not the Dart API (guesses or Java names) | `store.box<T>()`, `box.put()`, `store.runInTransaction(TxMode.write, fn)`, `box.query(c).build().find()` |
+| `box.query(c).find()` | `query()` returns a `QueryBuilder`; nothing runs before `build()` | `build()`, run, `close()` |
+| `box.query().linkMany(...).build()` | `linkMany()` returns the target-side builder, which has no `build()` | keep the source builder: `final qb = box.query(); qb.linkMany(...); qb.build()` |
+| Join entity with two `int` id fields instead of a `ToMany` | not a relation: no link query, no Sync remap, set logic in Dart | `ToMany<T>` plus `@Backlink()` ([Relations](#relations)) |
+| Relying on `ToMany` insertion order | reads back in target-id order | persist a position field |
+| Empty list for a lookup from an item without a vector | indistinguishable from "no neighbors" | typed result or error ([rule 9](../SKILL.md#9-failure-handling)) |
+| `getAll()` or a whole-box `find()` to diff ids on import | every object built, vectors included | `findIds()`, `count()`, then `getMany()` |
 | Polling, or a hand-rolled `StreamController` over `entityChanges` | `watch()` already is that bridge | `box.query(...).watch(triggerImmediately: true)` |
 | Not filtering `changedTypes` | fires on every entity type | `changedTypes.contains(MyEntity)` |
 | State in a `@Transient()` field or a second enum copy | objects are rebuilt on every read; a second enum is a second index mapping | persisted property; one enum with a stable `int` mapping ([Transient fields and enums](#transient-fields-and-enums)) |

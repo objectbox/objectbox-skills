@@ -59,7 +59,13 @@
           "type": 10
         }
       ],
-      "relations": []
+      "relations": [
+        {
+          "id": "1:3579688688481842576",
+          "name": "tags",
+          "targetId": "7:6915021202109728646"
+        }
+      ]
     },
     {
       "id": "5:9140951902676590693",
@@ -88,11 +94,32 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:6915021202109728646",
+      "lastPropertyId": "2:924505730885085654",
+      "name": "Tag",
+      "properties": [
+        {
+          "id": "1:4593214950183583329",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:924505730885085654",
+          "name": "name",
+          "indexId": "5:3405604097743130796",
+          "type": 9,
+          "flags": 2080
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:8538142039140094901",
-  "lastIndexId": "4:6098783241214294805",
-  "lastRelationId": "0:0",
+  "lastEntityId": "7:6915021202109728646",
+  "lastIndexId": "5:3405604097743130796",
+  "lastRelationId": "1:3579688688481842576",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,

@@ -12,7 +12,7 @@ import 'dart:io';
 const skillPath = '../../skills/objectbox/references/dart-flutter.md';
 const outDir = 'test/snippets';
 
-const entityNames = {'Conversation', 'Message', 'Chunk'};
+const entityNames = {'Conversation', 'Message', 'Chunk', 'Tag'};
 const contextNames = {
   'store',
   'box',
@@ -26,6 +26,10 @@ const contextNames = {
   'id',
   'queryVector',
   'maxCount',
+  'tagBox',
+  'tagNames',
+  'dbDir',
+  'idsInFile',
   'TestStoreHandle',
   'openTestStore',
 };

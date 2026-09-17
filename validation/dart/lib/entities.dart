@@ -19,7 +19,24 @@ class Conversation {
   @Backlink('conversation')
   final messages = ToMany<Message>();
 
+  /// Relations, Link queries: owning side of a many-to-many.
+  final tags = ToMany<Tag>();
+
   Conversation({this.id = 0, this.userId = '', this.title = ''});
+}
+
+/// Relations, Link queries: reverse side of the many-to-many.
+@Entity()
+class Tag {
+  @Id()
+  int id = 0;
+  @Unique()
+  String name = '';
+
+  @Backlink()
+  final conversations = ToMany<Conversation>();
+
+  Tag({this.id = 0, this.name = ''});
 }
 
 /// Relations, attach(), mirror-int, Cascade deletes: to-one side of the relation.

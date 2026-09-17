@@ -51,6 +51,13 @@ Available in Python, C, C++, Dart/Flutter, Java/Kotlin and Swift.
   other conditions are applied to the ANN candidates, so a small `maxCount`
   returns too few matches. A working heuristic from production use (the docs do
   not specify one): `maxCount = max(limit * 8, 40)`, then trim.
+- On a hot path, build the nearest-neighbor query once and re-run it with the next
+  vector through the binding's parameter API (table below). "Vectors cannot be
+  parameterised" is a wrong conclusion that agents reach on their own; rebuilding per
+  lookup pays the build cost every time and leaks the query when nobody closes it.
+- An object without a vector is not in the index. A lookup that starts from such an
+  object must produce a typed failure or result ([rule 9](../SKILL.md#9-failure-handling));
+  an empty list reads as "no neighbors".
 - Close queries like any other query (see the contract,
   [rule 4](../SKILL.md#4-queries)).
 
@@ -69,14 +76,14 @@ The nearest-neighbor query API differs per binding — in method name, casing,
 and even declaration mechanism. Getting it from another binding's docs is the
 most common failure mode.
 
-| Binding | Nearest-neighbor query | Index declaration |
-|---|---|---|
-| Java/Kotlin | `nearestNeighbors(queryVector, maxCount)` | `@HnswIndex(dimensions = ...)` on `float[]` / `FloatArray?` |
-| Dart | `nearestNeighborsF32(queryVector, maxCount)` | `@HnswIndex(dimensions: ...)` + `@Property(type: PropertyType.floatVector)` on `List<double>?` |
-| Python | `nearest_neighbor(query_vector, count)` | `Float32Vector(index=HnswIndex(dimensions=..., distance_type=VectorDistanceType....))` |
-| Swift | `nearestNeighbors(queryVector: v, maxCount: n)` — labeled arguments | comment annotation `// objectbox:hnswIndex: dimensions=...` on `[Float]?` |
-| C/C++ | `Entity_::prop.nearestNeighbors(v, n)` | in the `.fbs` schema: `/// objectbox: index=hnsw, hnsw-dimensions=...` (distance via `/// objectbox: hnsw-distance-type=...`) |
-| Go | not supported | not supported |
+| Binding | Nearest-neighbor query | Re-run a built query with a new vector | Index declaration |
+|---|---|---|---|
+| Java/Kotlin | `nearestNeighbors(queryVector, maxCount)` | `query.setParameter(Entity_.vector, floatArray)` | `@HnswIndex(dimensions = ...)` on `float[]` / `FloatArray?` |
+| Dart | `nearestNeighborsF32(queryVector, maxCount)` | `query.param(Entity_.vector).nearestNeighborsF32(v, n)` | `@HnswIndex(dimensions: ...)` + `@Property(type: PropertyType.floatVector)` on `List<double>?` |
+| Python | `nearest_neighbor(query_vector, count)` | `query.set_parameter_vector_f32(prop, v)` | `Float32Vector(index=HnswIndex(dimensions=..., distance_type=VectorDistanceType....))` |
+| Swift | `nearestNeighbors(queryVector: v, maxCount: n)` — labeled arguments | a `setParameter()` variant; check the Query API docs, not verified here | comment annotation `// objectbox:hnswIndex: dimensions=...` on `[Float]?` |
+| C/C++ | `Entity_::prop.nearestNeighbors(v, n)` | C: `obx_query_param_vector_float32(...)`; C++: check the docs | in the `.fbs` schema: `/// objectbox: index=hnsw, hnsw-dimensions=...` (distance via `/// objectbox: hnsw-distance-type=...`) |
+| Go | not supported | not supported | not supported |
 
 Scored finds: `findWithScores()` / `findIdsWithScores()` in Java/Kotlin, Dart
 and Swift; `find_with_scores()` / `find_ids_with_scores()` in Python; C++

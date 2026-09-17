@@ -108,7 +108,8 @@ Exact API names differ per binding — see the binding's reference file.
 
 **Use**
 - typed entity classes
-- real relations and typed link entities
+- real relations — to-one, to-many, backlinks; a typed link entity only when the
+  link itself carries data, and then connected by real to-one relations
 - queryable scalar fields for anything you filter, count or sort on
 - normalized child entities when the relationship carries metadata
 - a persisted property for any state that must survive a re-read
@@ -121,6 +122,11 @@ Exact API names differ per binding — see the binding's reference file.
 - keep state in transient fields or plain memory and expect it back after a
   re-read
 - persist an enum through a mapping that changes when the enum is edited
+- model a many-to-many as a hand-written join entity of two plain id fields:
+  no link query can follow it, Sync does not remap the ids, and every
+  "all of / any of" question becomes a loop in application code
+- rely on a to-many relation to preserve insertion order; treat it as
+  unordered and persist a position where order matters
 
 Objects are rebuilt on every read: `get`, queries and relation access return
 fresh instances, so nothing held in a transient field or only in memory
@@ -148,7 +154,8 @@ Important invariants must be enforced by schema and write paths, not by comments
 **Use**
 - direct queries for counts, slices and ordering
 - relation-aware filtering where the binding supports it
-- narrow hydration after targeted queries
+- id and count queries for set arithmetic — what an import must update or
+  remove, what a filter leaves — and hydration of only the objects you touch
 - a short-lived query by default: build, run, close in one scope
 - a long-lived query for hot paths: built once, kept by its owner, re-run
   with changed parameters — one per thread, queries are not thread-safe
@@ -156,6 +163,7 @@ Important invariants must be enforced by schema and write paths, not by comments
 **Do not**
 - bulk-load whole boxes and compute statistics in memory when a query can do it
 - use "get all" as the default read pattern
+- load a whole box to diff it against a file or another box
 - rebuild the same query on every call in a hot path
 
 Closing, reuse and parameters: https://docs.objectbox.io/queries.md
@@ -180,6 +188,9 @@ inter-process wake safety — never as primary change detection.
 **Use**
 - ObjectBox vector search with an HNSW index
 - one canonical ANN index per semantic retrieval use case
+- one long-lived nearest-neighbor query per hot path, re-run with the next
+  vector through the binding's parameter API — the query vector is a parameter
+  like any other (per-binding calls in references/vector-search.md)
 - explicit stale detection via text hash, embedding model identity, or source identity
 
 **Do not**
@@ -187,6 +198,8 @@ inter-process wake safety — never as primary change detection.
 - load all vectors into memory to compute similarity
 - keep two active vector-search systems for the same retrieval flow
 - query several ANN boxes and merge results without a documented reason
+- answer "similar to X" with an empty result when X has no vector: that is a
+  typed failure (rule 9), not "no neighbors"
 
 Two properties of the API that are easy to get wrong:
 - the returned score is a **distance** — lower is better, not higher

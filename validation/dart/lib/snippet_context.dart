@@ -19,6 +19,10 @@ late int conversationId;
 late int id;
 late List<double> queryVector;
 late int maxCount;
+late Box<Tag> tagBox;
+late List<String> tagNames;
+late String dbDir;
+late Set<int> idsInFile;
 
 // The Testing section declares these in its first block and uses them in the second.
 // Each block becomes its own file, so the second block resolves them here.
