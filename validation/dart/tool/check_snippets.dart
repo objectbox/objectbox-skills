@@ -30,6 +30,7 @@ const contextNames = {
   'tagNames',
   'dbDir',
   'idsInFile',
+  'batch',
   'TestStoreHandle',
   'openTestStore',
 };

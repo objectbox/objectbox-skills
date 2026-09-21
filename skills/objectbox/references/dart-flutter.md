@@ -82,6 +82,12 @@ Two traps in that snippet, both silent:
   `==` also compares the zone flag. Details:
   https://docs.objectbox.io/property-types.md
 
+And one that does not fail at all, which is why it is missed: **every property a query
+filters or looks up by gets `@Index()`** (`@Unique()` indexes as well). The query works
+without it, just without the index. The properties forgotten in the evaluation were the
+helper counters agents add for query support — a persisted `ingredientCount` filtered by
+`equals`, `between` and `greaterThan` in every run that had one, indexed in none.
+
 ## Relations
 
 Dart declares relations as **`final` fields with no constructor arguments** —
@@ -145,6 +151,11 @@ class Tag {
 - **A `ToMany` reads back in target-id order, not insertion order**, in both directions.
   Where order matters (steps, playlist items), persist a position field; evaluated agents
   discovered this late and sorted as a workaround.
+- **Putting a fresh instance with an existing id adds relation targets and removes none.**
+  The relation on that instance was never loaded, so it cannot know the old targets; `put()`
+  applies the additions you tracked and leaves the rest. To replace the targets of an
+  existing object (a re-import that changed its ingredients), load the object with
+  `box.get(id)`, remove the stale targets on the loaded relation, then put.
 
 Reading, writing and adding follow the docs
 (https://docs.objectbox.io/relations.md). The silent one:
@@ -216,6 +227,21 @@ Safe option: use only the `ToOne`, and query it via the generated property
 (e.g. `Message_.conversation`).
 
 
+## Bulk writes
+
+One write transaction per batch of a few hundred to a few thousand objects; not one per
+object, and not one for a whole import:
+
+```dart
+// Per batch: one transaction, one putMany. New relation targets (id 0) go in with the owner.
+store.runInTransaction(TxMode.write, () => conversationBox.putMany(batch));
+```
+
+Every commit syncs to disk, so a transaction per object pays that price per row. A single
+transaction around a whole import is all-or-nothing, which sounds right until the file is
+large: the evaluated run that chose it parsed the entire file into memory first to get there.
+Batch, and make the removal pass its own transaction ([Cascade deletes](#cascade-deletes-are-manual)).
+
 ## Cascade deletes are manual
 
 ObjectBox does not cascade. Removing a to-many entry dissolves the relationship;
@@ -244,6 +270,42 @@ bool deleteConversation(int conversationId) {
   targets they orphan (tags, ingredients, categories) go in one transaction. Two passes, or
   one `remove()` per row outside a transaction, leave orphans when the process dies in between.
 - `TxMode` has exactly two values: `TxMode.read` and `TxMode.write`.
+
+## Natural keys are `@Unique()` properties, not ids
+
+An external identity (a dataset id, a name) is a `@Unique()` property on an ObjectBox-assigned
+id, looked up with `findUnique()`. Query-or-create reads first: reads run in implicit read
+transactions that never block, while write transactions run one at a time and sync to disk on
+commit. Open the write transaction only when the row is missing, and look again inside it,
+because another writer may have created the row in between:
+
+```dart
+Tag tagFor(String name) {
+  final query = tagBox.query(Tag_.name.equals(name)).build();
+  try {
+    final found = query.findUnique();               // the common case: a read, no write transaction
+    if (found != null) return found;
+    return store.runInTransaction(TxMode.write, () {
+      final raced = query.findUnique();             // re-check: writes are sequential, reads are not
+      if (raced != null) return raced;
+      final created = Tag(name: name);
+      tagBox.put(created);
+      return created;
+    });
+  } finally {
+    query.close();
+  }
+}
+```
+
+Inside an import that creates many rows, the whole batch is already in one write transaction
+([Bulk writes](#bulk-writes)) and the read-first step is just the lookup.
+
+A hash of the natural key used as `@Id(assignable: true)` is not a unique index: `put()`
+overwrites whatever has that id, so a collision merges two rows without a trace, and the
+schema enforces nothing. One evaluated agent built all four of its entities that way, FNV-1a
+and all. Assignable ids are for ids that exist outside the database (next section), and even
+then the natural key keeps its `@Unique()`.
 
 ## Avoid assignable IDs with Sync
 
@@ -352,9 +414,12 @@ final results = similar.findWithScores();
 - "Vector conditions cannot be parameterised" is a wrong conclusion that evaluated agents,
   the strongest model included, reached on their own before rebuilding (and sometimes never
   closing) the query per lookup. `param(...).nearestNeighborsF32(vector, count)` is the setter.
-- Combine the vector condition with filters through `&` / `.and()` and over-fetch
-  ([vector-search.md](vector-search.md)); `findWithScores()` and `findIdsWithScores()` are
-  the only distance-ordered finds.
+- A filter is a condition on the same query — `nearestNeighborsF32(v, n) &
+  Chunk_.text.startsWith('a')` — with a larger `n` so enough candidates survive
+  ([vector-search.md](vector-search.md)). It is never a reason to rank a filtered subset with
+  a Dart loop: one evaluated run served the unfiltered lookup from the index and the
+  category-filtered one from a hand-written cosine scan, two retrieval systems for one
+  feature. `findWithScores()` and `findIdsWithScores()` are the only distance-ordered finds.
 - An object whose vector is `null` is not in the index. A lookup that starts from such an
   object must return something the caller can tell from "no neighbors" — a typed result or
   an error, never a bare empty list ([rule 9](../SKILL.md#9-failure-handling)).
@@ -427,11 +492,13 @@ the script's own comment warns of "obscure memory bugs". Take the script from th
 ```bash
 # objectbox 5.3.2 in pubspec.lock -> tag v5.3.2; --quiet skips the "install to /usr/local/lib?" prompt
 bash <(curl -fsSL https://raw.githubusercontent.com/objectbox/objectbox-dart/v5.3.2/install.sh) --quiet
+# dev-time artifacts, never committed: the library in lib/ and the download/ directory the script leaves behind
+printf 'lib/libobjectbox*\ndownload/\n' >> .gitignore
 ```
 
-- It leaves `lib/libobjectbox.*` and a `download/` directory behind. Git-ignore both
-  (`lib/libobjectbox*`, `download/`); they are dev-time artifacts. Evaluated agents
-  committed the library again and again, once with the whole tarball.
+- The two `.gitignore` lines are part of the install, not a separate step: evaluated agents
+  that read the rule as prose committed the library again and again, once with the whole
+  tarball.
 - `ObjectBox platform-specific database library not compatible: is 5.0.0 (...), expected
   5.3.2 (...) or newer` means an older copy on the system path was loaded because `lib/`
   has none. The `lib/` copy wins once it is there; do not chase the system copy.
@@ -642,6 +709,12 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | `box.query().linkMany(...).build()` | `linkMany()` returns the target-side builder, which has no `build()` | keep the source builder: `final qb = box.query(); qb.linkMany(...); qb.build()` |
 | Join entity with two `int` id fields instead of a `ToMany` | not a relation: no link query, no Sync remap, set logic in Dart | `ToMany<T>` plus `@Backlink()` ([Relations](#relations)) |
 | Relying on `ToMany` insertion order | reads back in target-id order | persist a position field |
+| Re-putting a fresh instance to replace its `ToMany` targets | an unloaded relation only adds; stale targets stay | load the owner, remove on the loaded relation, put |
+| A hash of the natural key as `@Id(assignable: true)` | `put()` overwrites by id; a collision merges rows silently; nothing is enforced | `@Unique()` on the key, `findUnique()`; read first, write transaction only when absent |
+| Query-or-create that opens a write transaction on every call | write transactions run one at a time and sync on commit; reads never block | read first, write transaction only when the row is missing, re-check inside it |
+| Filter or lookup property without `@Index()` | the query works, just without the index; helper counters are the ones forgotten | `@Index()` (or `@Unique()`) on every filtered property |
+| One transaction per object, or one for a whole import | a commit syncs to disk each time; the whole-file transaction came with parsing the file into memory | `putMany` per batch of about a thousand, one transaction each ([Bulk writes](#bulk-writes)) |
+| Ranking a filtered subset in Dart while the index serves the unfiltered case | two retrieval systems for one feature; the loop grows with the data | filter as a condition on the same query (`&`), over-fetch |
 | Empty list for a lookup from an item without a vector | indistinguishable from "no neighbors" | typed result or error ([rule 9](../SKILL.md#9-failure-handling)) |
 | `getAll()` or a whole-box `find()` to diff ids on import | every object built, vectors included | `findIds()`, `count()`, then `getMany()` |
 | Polling, or a hand-rolled `StreamController` over `entityChanges` | `watch()` already is that bridge | `box.query(...).watch(triggerImmediately: true)` |
