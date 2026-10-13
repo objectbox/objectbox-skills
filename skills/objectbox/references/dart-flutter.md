@@ -88,6 +88,42 @@ without it, just without the index. The properties forgotten in the evaluation w
 helper counters agents add for query support — a persisted `ingredientCount` filtered by
 `equals`, `between` and `greaterThan` in every run that had one, indexed in none.
 
+## Case-insensitive search
+
+An index only serves case-sensitive string conditions ([rule 4](../SKILL.md#4-queries)).
+`caseSensitive: false` (or `queriesCaseSensitiveDefault: false` on the store) still returns the right
+objects, but checks every one: about 160 ms on 1.66M objects whatever the prefix, against 0.1 ms
+for a selective case-sensitive one.
+Nothing warns about it, and search-as-you-type runs it on every keystroke.
+The `String` default index is a hash, which cannot serve `startsWith` at all; use a value index.
+
+Store a lower-cased copy, index that, and query it case-sensitively with lower-cased input:
+
+```dart
+@Entity()
+class Note {
+  @Id() int id = 0;
+  final String title;
+
+  // Value index: a hash index cannot serve startsWith.
+  @Index(type: IndexType.value)
+  String titleLower;
+
+  Note({this.id = 0, required this.title}) : titleLower = title.toLowerCase();
+}
+```
+
+```dart
+final query = noteBox
+    .query(Note_.titleLower.startsWith(input.toLowerCase(), caseSensitive: true))
+    .build();
+```
+
+Setting the copy in the constructor keeps it in step on every put; a mutable `title` needs a
+setter that updates both.
+Pass `caseSensitive: true` explicitly, so a store-wide `queriesCaseSensitiveDefault: false` does
+not turn the index off.
+
 ## Relations
 
 Dart declares relations as **`final` fields with no constructor arguments** —
@@ -713,6 +749,8 @@ ulimit -n 4096   # before dart test, dart run, flutter test
 | A hash of the natural key as `@Id(assignable: true)` | `put()` overwrites by id; a collision merges rows silently; nothing is enforced | `@Unique()` on the key, `findUnique()`; read first, write transaction only when absent |
 | Query-or-create that opens a write transaction on every call | write transactions run one at a time and sync on commit; reads never block | read first, write transaction only when the row is missing, re-check inside it |
 | Filter or lookup property without `@Index()` | the query works, just without the index; helper counters are the ones forgotten | `@Index()` (or `@Unique()`) on every filtered property |
+| `caseSensitive: false` on an indexed `String` (search-as-you-type) | an index only serves case-sensitive conditions; every query checks all objects, silently | indexed lower-case copy, queried with `caseSensitive: true` ([Case-insensitive search](#case-insensitive-search)) |
+| Plain `@Index()` on a `String` used with `startsWith` | the `String` default is a hash index, which cannot serve prefixes | `@Index(type: IndexType.value)` |
 | One transaction per object, or one for a whole import | a commit syncs to disk each time; the whole-file transaction came with parsing the file into memory | `putMany` per batch of about a thousand, one transaction each ([Bulk writes](#bulk-writes)) |
 | Ranking a filtered subset in Dart while the index serves the unfiltered case | two retrieval systems for one feature; the loop grows with the data | filter as a condition on the same query (`&`), over-fetch |
 | Empty list for a lookup from an item without a vector | indistinguishable from "no neighbors" | typed result or error ([rule 9](../SKILL.md#9-failure-handling)) |

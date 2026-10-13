@@ -159,14 +159,20 @@ Important invariants must be enforced by schema and write paths, not by comments
 - a short-lived query by default: build, run, close in one scope
 - a long-lived query for hot paths: built once, kept by its owner, re-run
   with changed parameters — one per thread, queries are not thread-safe
+- for case-insensitive search (equality or "starts with"), a lower-cased copy of the string
+  in its own indexed property, queried case-sensitively with the lower-cased input
+- a value index, not the default hash index, on a string property used with "starts with"
 
 **Do not**
 - bulk-load whole boxes and compute statistics in memory when a query can do it
 - use "get all" as the default read pattern
 - load a whole box to diff it against a file or another box
 - rebuild the same query on every call in a hot path
+- expect a case-insensitive string condition to use an index: it checks every object,
+  however selective the condition; a hash index cannot serve "starts with" either
 
 Closing, reuse and parameters: https://docs.objectbox.io/queries.md
+Index types and case: https://docs.objectbox.io/entity-annotations.md
 
 ## 5) Reactive updates
 

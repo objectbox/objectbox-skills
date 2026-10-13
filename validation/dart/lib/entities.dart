@@ -65,3 +65,15 @@ class Chunk {
 
   Chunk({this.id = 0, this.text = '', this.embedding});
 }
+
+/// Case-insensitive search: an indexed lower-case copy of the searched string.
+@Entity()
+class Note {
+  @Id()
+  int id = 0;
+  final String title;
+  @Index(type: IndexType.value)
+  String titleLower;
+
+  Note({this.id = 0, required this.title}) : titleLower = title.toLowerCase();
+}
