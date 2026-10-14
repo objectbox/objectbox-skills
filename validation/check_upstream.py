@@ -14,12 +14,14 @@ Locator forms:
   dart   objectbox_test/test/<file>.dart::<exact test name>            (objectbox-dart)
   java   <repo>:<path>.java::<method>  or  <repo>:<path>.kt::<method>  (objectbox-java,
          objectbox-integration-test)
+  python tests/<file>.py::<test function>                              (objectbox-python)
 
 REF defaults to the pinned tag: v<objectbox version from validation/dart/pubspec.yaml>
 for Dart, V<objectbox version from validation/java/gradle/libs.versions.toml>
-for both Java repositories; so does OLD. Without --repo, a repository is cloned
+for both Java repositories, v<objectbox version from validation/python/requirements.txt>
+for Python; so does OLD. Without --repo, a repository is cloned
 blob-less into validation/.cache/ from its remote (env OBJECTBOX_DART_REPO,
-OBJECTBOX_JAVA_REPO, OBJECTBOX_INTEGRATION_TEST_REPO). objectbox-integration-test
+OBJECTBOX_JAVA_REPO, OBJECTBOX_INTEGRATION_TEST_REPO, OBJECTBOX_PYTHON_REPO). objectbox-integration-test
 is internal and has no default remote: its locators are skipped unless the env
 var or --repo names a checkout. Exit status is non-zero when a locator is
 missing or, with --diff, when a cited test changed: read that test before
@@ -45,6 +47,11 @@ def java_pin():
     return "V" + re.search(r'^objectbox\s*=\s*"([^"]+)"', text, re.M).group(1)
 
 
+def python_pin():
+    text = (HERE / "python" / "requirements.txt").read_text()
+    return "v" + re.search(r"^objectbox(?:-sync)?==(\S+)", text, re.M).group(1)
+
+
 def dart_test_body(src, name):
     m = re.search(r"\btest\(\s*(['\"])" + re.escape(name) + r"\1", src or "")
     if not m:
@@ -64,6 +71,16 @@ def junit_test_body(src, name):
     indent = m.group(1)
     end = re.compile(r"^" + indent + r"\}[ \t]*$", re.M).search(src, m.end())
     return src[m.start(): end.end() if end else len(src)]
+
+
+def pytest_test_body(src, name):
+    """A pytest test function: from its def (and decorators) to the next top-level statement."""
+    m = re.search(r"^(?:@[^\n]*\n)*def " + re.escape(name) + r"\(", src or "", re.M)
+    if not m:
+        return None
+    line_end = src.find("\n", m.end())
+    end = re.compile(r"^(?=\S)", re.M).search(src, line_end + 1) if line_end >= 0 else None
+    return src[m.start(): end.start() if end else len(src)].rstrip()
 
 
 BINDINGS = {
@@ -89,6 +106,15 @@ BINDINGS = {
                 remote=os.environ.get("OBJECTBOX_INTEGRATION_TEST_REPO"),  # internal, none by default
                 pin=java_pin),
         },
+    ),
+    "python": dict(
+        coverage=HERE / "python" / "COVERAGE.md",
+        locator=re.compile(r"()(tests/[\w/]+\.py)::(\w+)"),
+        default_repo="objectbox-python",
+        body=pytest_test_body,
+        repos={"objectbox-python": dict(
+            remote=os.environ.get("OBJECTBOX_PYTHON_REPO", "https://github.com/objectbox/objectbox-python.git"),
+            pin=python_pin)},
     ),
 }
 

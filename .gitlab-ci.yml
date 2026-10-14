@@ -65,6 +65,19 @@ validate-java:
     - python3 -m json.tool .claude-plugin/plugin.json > /dev/null
     - validation/java/run.sh
 
+# Same for Python: the snippets run against the pinned objectbox package (installed from PyPI),
+# the coverage rows match the skill file, links resolve, and every objectbox-python locator exists.
+validate-python:
+  stage: test
+  image: python:3.12-slim
+  tags: [ x64, linux, docker ]
+  variables:
+    OBJECTBOX_PYTHON_REPO: 'https://github.com/objectbox/objectbox-python.git'
+  before_script:
+    - apt-get update && apt-get install --yes --no-install-recommends git ca-certificates
+  script:
+    - validation/python/run.sh
+
 # Scheduled drift check: have the cited upstream tests changed or gone
 # missing between the pinned tag and the development branch? Running them would prove nothing,
 # objectbox-dart's CI already does; a changed body means a claim's evidence is
@@ -78,3 +91,4 @@ upstream-drift:
   script:
     - python3 validation/check_upstream.py --binding dart --diff origin/main
     - python3 validation/check_upstream.py --binding java --diff origin/dev
+    - python3 validation/check_upstream.py --binding python --diff origin/dev

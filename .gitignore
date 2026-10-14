@@ -15,3 +15,6 @@ validation/java/objectbox-models/
 validation/java/build/
 validation/java/.gradle/
 validation/java/.kotlin/
+
+# validation/python: the venv with the pinned objectbox package
+validation/python/.venv/

@@ -94,3 +94,26 @@ Layout:
 - `tool/extract_snippets.py` — the snippet extractor; writes the generated
   files to `src/main/kotlin/io/objectbox/skill/snippets/` (git-ignored, like
   the processor's `objectbox-models/`).
+
+## Python
+
+```bash
+validation/python/run.sh
+```
+
+`run.sh` checks the coverage table and the links, executes every ` ```python ` block of the skill
+file in order (in-memory stores, files in a temporary directory) against the pinned `objectbox`
+version from `requirements.txt` (installed into `python/.venv`, or the interpreter in `PYTHON`),
+then resolves every upstream locator against objectbox-python at tag `v<version>`.
+Python has no compiler to prove an API's shape, so the snippets are run;
+behavior beyond that is cited from objectbox-python's `tests/` in `COVERAGE.md`.
+Before a version is tagged, check against a local checkout and build:
+
+```bash
+PYTHON=<venv with that build>/bin/python validation/python/run.sh --repo objectbox-python=<checkout> --ref <commit>
+```
+
+Layout:
+
+- `requirements.txt` — the pinned objectbox version.
+- `tool/check_snippets.py` — the snippet runner.

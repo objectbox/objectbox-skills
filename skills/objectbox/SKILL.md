@@ -31,7 +31,7 @@ debug them.
 | `build.gradle(.kts)` with `io.objectbox` | Java / Kotlin | [references/java-kotlin.md](references/java-kotlin.md) |
 | `Package.swift` / `Podfile` with ObjectBox | Swift | [references/swift.md](references/swift.md) — stub, see banner |
 | `go.mod` with `objectbox/objectbox-go` | Go | [references/go.md](references/go.md) — stub, see banner |
-| `pyproject.toml` / requirements with `objectbox` | Python | [references/python.md](references/python.md) — stub, see banner |
+| `pyproject.toml` / requirements with `objectbox` or `objectbox-sync` | Python | [references/python.md](references/python.md) |
 | `CMakeLists.txt` / headers with `objectbox` | C / C++ | [references/c-cpp.md](references/c-cpp.md) — stub, see banner |
 
 A workspace with several bindings (e.g. Flutter app + Go backend) needs the
@@ -245,6 +245,7 @@ Treat it as sync-critical source code.
 | Swift | `model-<target-name>.json` |
 | Dart | `lib/objectbox-model.json` |
 | Go | `objectbox-model.json` — per package, next to `objectbox-model.go` |
+| Python | `objectbox-model.json` — pass `model_json_file=`; by default next to the module that opens the store |
 | C/C++ | `objectbox-model.json` (the generated `objectbox-model.h` is a separate file) |
 
 - Commit it.
@@ -275,7 +276,8 @@ binding's documentation is the most common source of broken ObjectBox code.
 Known asymmetries:
 - nearest-neighbor query methods are named differently per binding, and vector
   search is not available in Go at all
-- the Python binding does not support relations — do not generate relation code for it
+- the Python binding has to-one relations only, as plain integer IDs (`Relation`, with link and backlink queries),
+  and no data observers — do not generate ToOne/ToMany, `@Backlink` or observer code for it
 - relation loading defaults differ: Go loads relations eagerly by default,
   Swift and Dart lazily
 - code generation is invoked differently per binding, but is required in all of them

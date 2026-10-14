@@ -1,0 +1,4 @@
+# The objectbox version the Python skill file is verified against; check_upstream.py derives the tag
+# (v<version>) from it. run.sh installs it into validation/python/.venv unless PYTHON is set.
+# objectbox-sync (not objectbox): the Sync variant of the native library, so the Sync snippets run too.
+objectbox-sync==5.0.0

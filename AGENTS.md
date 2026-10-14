@@ -12,7 +12,7 @@ data gets wrong. It is not a mirror of API documentation.
   binding-agnostic contract, and routing tables that send agents to reference
   files along two axes: language binding and task.
 - `skills/objectbox/references/<binding>.md` — per-binding guidance
-  (`dart-flutter.md`, `java-kotlin.md`; `swift.md`, `go.md`, `python.md`,
+  (`dart-flutter.md`, `java-kotlin.md`, `python.md`; `swift.md`, `go.md`,
   `c-cpp.md` are marked stubs).
 - `skills/objectbox/references/<topic>.md` — cross-cutting task guides
   (`sync-server-setup.md`, `vector-search.md`).
@@ -78,7 +78,8 @@ A claim is covered upstream only when all of these hold:
 1. A test at the pinned tag asserts the claim's specific behavior. Cite it in
    `validation/<binding>/COVERAGE.md`: Dart as `objectbox_test/test/<file>::<exact
    test name>` (objectbox-dart), Java/Kotlin as `<repo>:<path>::<method>` with
-   `<repo>` being `objectbox-java` or `objectbox-integration-test`.
+   `<repo>` being `objectbox-java` or `objectbox-integration-test`,
+   Python as `tests/<file>.py::<test function>` (objectbox-python).
 2. You have read the test body and can quote the `expect(...)` lines that
    prove the claim. A grep hit, a comment, or a test that merely calls the
    API is a candidate, not evidence. Never cite from memory.
@@ -106,8 +107,9 @@ row. The scheduled CI job does the same against `main` as an early warning.
 - SKILL.md stays well under 500 lines; deep material goes to `references/`.
 - Any new or changed API claim was checked against the official docs, not
   recalled.
-- `validation/dart/run.sh` passes after touching `dart-flutter.md`, and
-  `validation/java/run.sh` after touching `java-kotlin.md`; every row of a
+- `validation/dart/run.sh` passes after touching `dart-flutter.md`,
+  `validation/java/run.sh` after touching `java-kotlin.md`, and
+  `validation/python/run.sh` after touching `python.md`; every row of a
   "Quick reference" table has a row in that binding's `COVERAGE.md`.
 - `python3 validation/check_upstream.py --binding <binding>` resolves every
   upstream locator at the pinned tag (clones the upstream repositories into

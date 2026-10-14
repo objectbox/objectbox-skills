@@ -80,14 +80,15 @@ most common failure mode.
 |---|---|---|---|
 | Java/Kotlin | `nearestNeighbors(queryVector, maxCount)` | `query.setParameter(Entity_.vector, floatArray)` | `@HnswIndex(dimensions = ...)` on `float[]` / `FloatArray?` |
 | Dart | `nearestNeighborsF32(queryVector, maxCount)` | `query.param(Entity_.vector).nearestNeighborsF32(v, n)` | `@HnswIndex(dimensions: ...)` + `@Property(type: PropertyType.floatVector)` on `List<double>?` |
-| Python | `nearest_neighbor(query_vector, count)` | `query.set_parameter_vector_f32(prop, v)` | `Float32Vector(index=HnswIndex(dimensions=..., distance_type=VectorDistanceType....))` |
+| Python | `nearest_neighbors(query_vector, max_result_count)` (5.0; `nearest_neighbor` is deprecated) | `query.set_parameter(prop, v)` | `Float32Vector(index=HnswIndex(dimensions=..., distance_type=VectorDistanceType....))` |
 | Swift | `nearestNeighbors(queryVector: v, maxCount: n)` — labeled arguments | a `setParameter()` variant; check the Query API docs, not verified here | comment annotation `// objectbox:hnswIndex: dimensions=...` on `[Float]?` |
 | C/C++ | `Entity_::prop.nearestNeighbors(v, n)` | C: `obx_query_param_vector_float32(...)`; C++: check the docs | in the `.fbs` schema: `/// objectbox: index=hnsw, hnsw-dimensions=...` (distance via `/// objectbox: hnsw-distance-type=...`) |
 | Go | not supported | not supported | not supported |
 
 Scored finds: `findWithScores()` / `findIdsWithScores()` in Java/Kotlin, Dart
-and Swift; `find_with_scores()` / `find_ids_with_scores()` in Python; C++
-`findWithScores()` returns entity/distance pairs.
+and Swift; `find_with_scores()` / `find_ids_with_scores()` in Python (named
+tuples `(object, score)` and `(id, score)`); C++ `findWithScores()` returns
+entity/distance pairs.
 
 Python note: the docs mark the Python vector-search APIs as non-final and
 subject to change — re-check on version updates.

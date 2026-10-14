@@ -86,7 +86,7 @@ skills/objectbox/
     java-kotlin.md
     swift.md                 ← stub — needs a maintainer pass
     go.md                    ← stub
-    python.md                ← stub
+    python.md
     c-cpp.md                 ← stub
     sync-server-setup.md     ← task guide: run a Sync Server, schema changes
     vector-search.md         ← task guide: HNSW design + per-binding API names
@@ -103,11 +103,12 @@ docs instead, so nothing here goes stale against a release.
 
 The skill files are prose, so `validation/` holds what falsifies them. Each
 binding has a `COVERAGE.md` that maps every row of the skill's quick-reference
-table to the upstream test behind it (objectbox-dart, objectbox-java or the
-internal objectbox-integration-test), or marks it unverified; `run.sh` checks
+table to the upstream test behind it (objectbox-dart, objectbox-java, the
+internal objectbox-integration-test or objectbox-python), or marks it unverified; `run.sh` checks
 the table against the skill file and resolves every cited test at the pinned
 upstream tag. For Dart, `validation/dart/run.sh` additionally compiles every
-code snippet in `dart-flutter.md` against a pinned ObjectBox version. No tests
+code snippet in `dart-flutter.md` against a pinned ObjectBox version;
+for Python, `validation/python/run.sh` runs every snippet in `python.md`. No tests
 live here: what upstream did not assert is added upstream.
 
 ## Status
@@ -118,7 +119,7 @@ live here: what upstream did not assert is added upstream.
 | Java / Kotlin  | Written, derived from production use |
 | Swift          | Stub — needs a maintainer pass       |
 | Go             | Stub — needs a maintainer pass       |
-| Python         | Stub — needs a maintainer pass       |
+| Python         | Written, derived from the binding's source and tests (5.0) |
 | C / C++        | Stub — needs a maintainer pass       |
 
 Stub bindings still get the full binding-agnostic contract; their reference
